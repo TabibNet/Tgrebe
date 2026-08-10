@@ -1707,6 +1707,6 @@
         if(viewsData) await sb.from('site_stats').update({ count: viewsData.count + 1 }).eq('id', 'views_metrics');
     }
     function animateCounter(target, elementId) { const el = document.getElementById(elementId); if (!el) return; let current = 0; const timer = setInterval(() => { current++; if (current >= target) { current = target; clearInterval(timer); } el.innerText = current.toLocaleString('ar-EG'); }, 30); }
-</script>
+
 </body>
 </html>
