@@ -1405,10 +1405,13 @@
         const docs = data ? data.map(d => ({ id: d.id, data: () => d })) : [];
         return { empty: docs.length === 0, docs, forEach: (cb) => docs.forEach(cb) };
     };
-
-    const addDoc = async (coll, data) => {
+        const addDoc = async (coll, data) => {
         const { data: newDoc, error } = await sb.from(coll._name).insert([data]).select();
-        if (error) console.error('AddDoc error:', error);
+        if (error) {
+            console.error('AddDoc Error:', error);
+            showToast('خطأ في الإضافة: ' + error.message); // إظهار الخطأ للمستخدم
+            throw error;
+        }
         return { id: newDoc && newDoc[0] ? newDoc[0].id : null };
     };
 
@@ -1420,12 +1423,24 @@
                 processedData[key] = (current && current[key] || 0) + processedData[key].__increment;
             }
         }
-        await sb.from(ref._name).update(processedData).eq('id', ref._id);
+        const { error } = await sb.from(ref._name).update(processedData).eq('id', ref._id);
+        if (error) {
+            console.error('UpdateDoc Error:', error);
+            showToast('خطأ في التحديث: ' + error.message);
+            throw error;
+        }
     };
 
-    const deleteDoc = async (ref) => { await sb.from(ref._name).delete().eq('id', ref._id); };
+    const deleteDoc = async (ref) => { 
+        const { error } = await sb.from(ref._name).delete().eq('id', ref._id);
+        if (error) {
+            console.error('DeleteDoc Error:', error);
+            showToast('خطأ في الحذف: ' + error.message);
+            throw error;
+        }
+    };
 
-    const setDoc = async (ref, data, options) => {
+    const setDoc = async (ref, data, opts) => {
         const processedData = { ...data };
         for (const key in processedData) {
             if (processedData[key] && processedData[key].__increment !== undefined) {
@@ -1433,33 +1448,12 @@
                 processedData[key] = (current && current[key] || 0) + processedData[key].__increment;
             }
         }
-        await sb.from(ref._name).upsert({ ...processedData, id: ref._id });
-    };
-
-    const onSnapshot = (ref, callback) => {
-        const fetchData = async () => {
-            if (ref._type === 'collection' || (ref.coll && ref.coll._type === 'collection')) {
-                const tableName = ref._name || (ref.coll && ref.coll._name);
-                let q = sb.from(tableName).select('*');
-                if (ref.constraints) {
-                    ref.constraints.forEach(c => {
-                        if (c.type === 'where') {
-                            if (c.op === '==') q = q.eq(c.field, c.value);
-                            else if (c.op === 'in') q = q.in(c.field, c.value);
-                        }
-                    });
-                }
-                const { data } = await q;
-                const docs = data ? data.map(d => ({ id: d.id, data: () => d })) : [];
-                callback({ empty: docs.length === 0, docs, forEach: (cb) => docs.forEach(cb) });
-            } else if (ref._type === 'doc') {
-                const { data } = await sb.from(ref._name).select('*').eq('id', ref._id).single();
-                callback({ exists: () => !!data, data: () => data, id: ref._id });
-            }
-        };
-        fetchData();
-        const interval = setInterval(fetchData, 3000); // جلب البيانات كل 3 ثواني كبديل للـ Real-time
-        return () => clearInterval(interval);
+        const { error } = await sb.from(ref._name).upsert({ ...processedData, id: ref._id });
+        if (error) {
+            console.error('SetDoc Error:', error);
+            showToast('خطأ في الحفظ: ' + error.message);
+            throw error;
+        }
     };
     
     // ==========================================
