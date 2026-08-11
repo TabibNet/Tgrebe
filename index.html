@@ -1384,8 +1384,9 @@
     const query = (coll, ...constraints) => ({ coll, constraints });
     const where = (field, op, value) => ({ type: 'where', field, op, value });
 
-    const getDoc = async (ref) => {
-        const { data, error } = await sb.from(ref._name).select('*').eq('id', ref._id).single();
+        const getDoc = async (ref) => {
+        // استخدام maybeSingle لتفادي خطأ عند عدم وجود بيانات
+        const { data, error } = await sb.from(ref._name).select('*').eq('id', ref._id).maybeSingle();
         return { exists: () => !!data && !error, data: () => data, id: ref._id };
     };
 
