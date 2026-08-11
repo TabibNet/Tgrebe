@@ -3721,7 +3721,6 @@ getDocs(collection(db, 'blood_requests')).then((snapshot) => {
         }).join('');
         openCtrlPanel(`لوحة: ${doc.name}`, `<div class="flex flex-col gap-5"><div class="bg-white p-5 rounded-xl border flex items-center gap-4" style="border-color: var(--border)"><img src="${doc.image}" class="w-20 h-20 rounded-2xl object-cover"><div><h3 class="font-bold text-lg">${doc.name}</h3><p class="text-sm" style="color: var(--doctor)">${doc.specialty}</p></div></div><div class="bg-white p-3 rounded-xl border flex items-center justify-between gap-2 mb-3" style="border-color: var(--border);"><span class="text-sm font-bold text-gray-700">حالة العمل:</span><div class="flex gap-1 bg-gray-50 p-1 rounded-lg"><button onclick="setStatus('${doc.id}', true)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${doc.isOpen === true ? 'bg-green-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">مفتوح</button><button onclick="setStatus('${doc.id}', false)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${doc.isOpen === false ? 'bg-red-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">مغلق</button><button onclick="setStatus('${doc.id}', null)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${doc.isOpen == null ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">لا شيء</button></div></div><button onclick="openDoctorScanner('${doc.id}')" class="w-full py-3 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2 mt-2" style="background: #0D9488"><i class="fas fa-qrcode"></i> قراءة الملف الصحي للمريض (QR)</button><button onclick="openAskDoctor('${doc.name}')" class="w-full py-3 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2 mb-3" style="background: #0EA5E9"><i class="fas fa-comments"></i> الإجابة على أسئلة المرضى</button><div class="bg-white p-5 rounded-xl border" style="border-color: var(--border)"><h4 class="font-bold mb-4 text-sm"><i class="fas fa-calendar-day ml-2" style="color: var(--doctor)"></i> طلبات المواعيد (${docBookings.length})</h4><div class="flex flex-col gap-2">${bookingsListHtml}</div></div><div class="bg-white p-5 rounded-xl border" style="border-color: var(--border)"><h4 class="font-bold mb-4 text-sm"><i class="fas fa-cog ml-2"></i> أيام العمل</h4><div class="mb-4 grid grid-cols-4 sm:grid-cols-7 gap-2">${daysCheckboxes}</div><button onclick="saveDoctorSettings('${doc.id}')" class="w-full py-2.5 rounded-xl text-white font-semibold text-sm" style="background: var(--doctor)">حفظ</button></div></div>`, '#2563EB'); 
     
-     }); 
 };                                            
             window.acceptBooking = async (bookingId) => { 
         const timeInput = document.getElementById(`time_${bookingId}`); const time = timeInput.value.trim(); 
@@ -4566,8 +4565,7 @@ getDocs(collection(db, 'blood_requests')).then((snapshot) => {
         const loopAttr = isSingleAd ? 'loop' : '';
         const endedAttr = isSingleAd ? '' : 'onended="nextAdSlide()"';
         
-        // === التعديل السحري هنا: منع الحلقة اللانهائية ===
-        // إذا كان هناك إعلان واحد فقط وفشل تحميل الفيديو، سنقوم بإخفاء القسم بدلاً من محاولة إعادة التحميل
+        // منع الحلقة اللانهائية: إذا كان إعلان واحد وفشل، أخفِ القسم
         const errorAttr = isSingleAd 
             ? 'onerror="document.getElementById(\'homeMediaAdsSection\').classList.add(\'hidden\')"' 
             : 'onerror="nextAdSlide()"';
@@ -4599,35 +4597,6 @@ getDocs(collection(db, 'blood_requests')).then((snapshot) => {
         }
     }
 }
-            // إضافة onloadedmetadata لقراءة مدة الفيديو، و onwaiting/onplaying لإيقاف المؤقت وقت التحميل
-            mediaHTML = `<div class="relative w-full h-full bg-black overflow-hidden">
-                <video id="homeAdVideo" autoplay muted playsinline preload="auto" ${loopAttr} ${endedAttr} onerror="nextAdSlide()" onloadedmetadata="setupVideoFallback(this)" onwaiting="pauseAdFallback()" onplaying="resumeAdFallback(this)" class="w-full h-full object-cover">
-                    <source src="${ad.content}" type="video/mp4">
-                    متصفحك لا يدعم تشغيل الفيديو المباشر.
-                </video>
-                <button onclick="toggleAdVideoSound()" class="absolute top-3 right-3 bg-black/50 hover:bg-black/70 text-white w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-sm z-30 transition-all">
-                    <i class="fas fa-volume-xmark" id="adVideoSoundIcon"></i>
-                </button>
-            </div>`;
-            
-            // مؤقت احتياطي افتراضي (30 ثانية) فقط في حال فشل قراءة مدة الفيديو
-            if (!isSingleAd) {
-                adInterval = setTimeout(nextAdSlide, 30000);
-            }
-        }
-
-        container.innerHTML = `<div class="w-full h-full transition-opacity duration-500">${mediaHTML}</div>`;
-        
-        if (dotsContainer) {
-            if (isSingleAd) {
-                dotsContainer.innerHTML = '';
-            } else {
-                dotsContainer.innerHTML = activeAds.map((_, i) => `
-                    <span class="w-2 h-2 rounded-full bg-white/50 cursor-pointer transition-all ${i === index ? 'w-6 bg-white' : ''}" onclick="goToAdSlide(${i})"></span>
-                `).join('');
-            }
-        }
-    }
 
     // === دوال جديدة للتحكم الذكي بوقت الفيديو ===
 
