@@ -1391,23 +1391,20 @@
         return { exists: () => !!data && !error, data: () => data, id: ref._id };
     };
 
-    const getDocs = async (refOrQuery) => {
-    const tableName = refOrQuery._name || (refOrQuery.coll && refOrQuery.coll._name);
-    let q = sb.from(tableName).select('*');
-    if (refOrQuery.constraints) {
-        refOrQuery.constraints.forEach(c => {
-            if (c.type === 'where') {
-                if (c.op === '==') q = q.eq(c.field, c.value);
-                else if (c.op === 'in') q = q.in(c.field, c.value);
-                else if (c.op === '>=') q = q.gte(c.field, c.value);
-            } else if (c.type === 'limit') { // دعم دالة الليميت
-                q = q.limit(c.value);
-            }
-    
-    const { data } = await q;
-    const docs = data ? data.map(d => ({ id: d.id, data: () => d })) : [];
-    return { empty: docs.length === 0, docs, forEach: (cb) => docs.forEach(cb) };
-};
+        const getDocs = async (refOrQuery) => {
+        const tableName = refOrQuery._name || (refOrQuery.coll && refOrQuery.coll._name);
+        let q = sb.from(tableName).select('*');
+        if (refOrQuery.constraints) {
+            refOrQuery.constraints.forEach(c => {
+                if (c.type === 'where') {
+                    if (c.op === '==') q = q.eq(c.field, c.value);
+                    else if (c.op === 'in') q = q.in(c.field, c.value);
+                    else if (c.op === '>=') q = q.gte(c.field, c.value);
+                } else if (c.type === 'limit') { // دعم دالة الليميت
+                    q = q.limit(c.value);
+                }
+            });
+        }
         const { data } = await q;
         const docs = data ? data.map(d => ({ id: d.id, data: () => d })) : [];
         return { empty: docs.length === 0, docs, forEach: (cb) => docs.forEach(cb) };
@@ -4567,36 +4564,7 @@ getDocs(collection(db, 'blood_requests')).then((snapshot) => {
         
         // منع الحلقة اللانهائية: إذا كان إعلان واحد وفشل، أخفِ القسم
         const errorAttr = isSingleAd 
-            ? 'onerror="document.getElementById(\'homeMediaAdsSection\').classList.add(\'hidden\')"' 
-            : 'onerror="nextAdSlide()"';
-
-        mediaHTML = `<div class="relative w-full h-full bg-black overflow-hidden">
-            <video id="homeAdVideo" autoplay muted playsinline preload="auto" ${loopAttr} ${endedAttr} ${errorAttr} onloadedmetadata="setupVideoFallback(this)" onwaiting="pauseAdFallback()" onplaying="resumeAdFallback(this)" class="w-full h-full object-cover">
-                <source src="${ad.content}" type="video/mp4">
-                متصفحك لا يدعم تشغيل الفيديو المباشر.
-            </video>
-            <button onclick="toggleAdVideoSound()" class="absolute top-3 right-3 bg-black/50 hover:bg-black/70 text-white w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-sm z-30 transition-all">
-                <i class="fas fa-volume-xmark" id="adVideoSoundIcon"></i>
-            </button>
-        </div>`;
         
-        if (!isSingleAd) {
-            adInterval = setTimeout(nextAdSlide, 30000);
-        }
-    }
-
-    container.innerHTML = `<div class="w-full h-full transition-opacity duration-500">${mediaHTML}</div>`;
-    
-    if (dotsContainer) {
-        if (isSingleAd) {
-            dotsContainer.innerHTML = '';
-        } else {
-            dotsContainer.innerHTML = activeAds.map((_, i) => `
-                <span class="w-2 h-2 rounded-full bg-white/50 cursor-pointer transition-all ${i === index ? 'w-6 bg-white' : ''}" onclick="goToAdSlide(${i})"></span>
-            `).join('');
-        }
-    }
-}
 
     // === دوال جديدة للتحكم الذكي بوقت الفيديو ===
 
