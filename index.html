@@ -4540,7 +4540,7 @@ getDocs(collection(db, 'blood_requests')).then((snapshot) => {
     let currentAdIndex = 0;
     let adInterval = null;
 
-       window.renderAdSlide = (index) => {
+           window.renderAdSlide = (index) => {
     const container = document.getElementById('homeAdContainer');
     const dotsContainer = document.getElementById('adDots');
     if (!container || activeAds.length === 0) return;
@@ -4564,7 +4564,36 @@ getDocs(collection(db, 'blood_requests')).then((snapshot) => {
         
         // منع الحلقة اللانهائية: إذا كان إعلان واحد وفشل، أخفِ القسم
         const errorAttr = isSingleAd 
+            ? 'onerror="document.getElementById(\'homeMediaAdsSection\').classList.add(\'hidden\')"' 
+            : 'onerror="nextAdSlide()"';
+
+        mediaHTML = `<div class="relative w-full h-full bg-black overflow-hidden">
+            <video id="homeAdVideo" autoplay muted playsinline preload="auto" ${loopAttr} ${endedAttr} ${errorAttr} onloadedmetadata="setupVideoFallback(this)" onwaiting="pauseAdFallback()" onplaying="resumeAdFallback(this)" class="w-full h-full object-cover">
+                <source src="${ad.content}" type="video/mp4">
+                متصفحك لا يدعم تشغيل الفيديو المباشر.
+            </video>
+            <button onclick="toggleAdVideoSound()" class="absolute top-3 right-3 bg-black/50 hover:bg-black/70 text-white w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-sm z-30 transition-all">
+                <i class="fas fa-volume-xmark" id="adVideoSoundIcon"></i>
+            </button>
+        </div>`;
         
+        if (!isSingleAd) {
+            adInterval = setTimeout(nextAdSlide, 30000);
+        }
+    }
+
+    container.innerHTML = `<div class="w-full h-full transition-opacity duration-500">${mediaHTML}</div>`;
+    
+    if (dotsContainer) {
+        if (isSingleAd) {
+            dotsContainer.innerHTML = '';
+        } else {
+            dotsContainer.innerHTML = activeAds.map((_, i) => `
+                <span class="w-2 h-2 rounded-full bg-white/50 cursor-pointer transition-all ${i === index ? 'w-6 bg-white' : ''}" onclick="goToAdSlide(${i})"></span>
+            `).join('');
+        }
+    }
+}
 
     // === دوال جديدة للتحكم الذكي بوقت الفيديو ===
 
