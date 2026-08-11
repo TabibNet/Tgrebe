@@ -1416,11 +1416,43 @@
         return { id: newDoc && newDoc[0] ? newDoc[0].id : null };
     };
 
+        const getDoc = async (ref) => {
+        const { data, error } = await sb.from(ref._name).select('*').eq('id', ref._id).maybeSingle();
+        return { exists: () => !!data && !error, data: () => data, id: ref._id };
+    };
+
+    const getDocs = async (refOrQuery) => {
+        const tableName = refOrQuery._name || (refOrQuery.coll && refOrQuery.coll._name);
+        let q = sb.from(tableName).select('*');
+        if (refOrQuery.constraints) {
+            refOrQuery.constraints.forEach(c => {
+                if (c.type === 'where') {
+                    if (c.op === '==') q = q.eq(c.field, c.value);
+                    else if (c.op === 'in') q = q.in(c.field, c.value);
+                    else if (c.op === '>=') q = q.gte(c.field, c.value);
+                }
+            });
+        }
+        const { data } = await q;
+        const docs = data ? data.map(d => ({ id: d.id, data: () => d })) : [];
+        return { empty: docs.length === 0, docs, forEach: (cb) => docs.forEach(cb) };
+    };
+
+    const addDoc = async (coll, data) => {
+        const { data: newDoc, error } = await sb.from(coll._name).insert([data]).select();
+        if (error) {
+            console.error('AddDoc Error:', error);
+            showToast('خطأ في الإضافة: ' + error.message);
+            throw error;
+        }
+        return { id: newDoc && newDoc[0] ? newDoc[0].id : null };
+    };
+
     const updateDoc = async (ref, data) => {
         const processedData = { ...data };
         for (const key in processedData) {
             if (processedData[key] && processedData[key].__increment !== undefined) {
-                const { data: current } = await sb.from(ref._name).select(key).eq('id', ref._id).single();
+                const { data: current } = await sb.from(ref._name).select(key).eq('id', ref._id).maybeSingle();
                 processedData[key] = (current && current[key] || 0) + processedData[key].__increment;
             }
         }
@@ -1445,7 +1477,7 @@
         const processedData = { ...data };
         for (const key in processedData) {
             if (processedData[key] && processedData[key].__increment !== undefined) {
-                const { data: current } = await sb.from(ref._name).select(key).eq('id', ref._id).single();
+                const { data: current } = await sb.from(ref._name).select(key).eq('id', ref._id).maybeSingle();
                 processedData[key] = (current && current[key] || 0) + processedData[key].__increment;
             }
         }
@@ -1455,6 +1487,33 @@
             showToast('خطأ في الحفظ: ' + error.message);
             throw error;
         }
+    };
+
+    const onSnapshot = (ref, callback) => {
+        const fetchData = async () => {
+            if (ref._type === 'collection' || (ref.coll && ref.coll._type === 'collection')) {
+                const tableName = ref._name || (ref.coll && ref.coll._name);
+                let q = sb.from(tableName).select('*');
+                if (ref.constraints) {
+                    ref.constraints.forEach(c => {
+                        if (c.type === 'where') {
+                            if (c.op === '==') q = q.eq(c.field, c.value);
+                            else if (c.op === 'in') q = q.in(c.field, c.value);
+                            else if (c.op === '>=') q = q.gte(c.field, c.value);
+                        }
+                    });
+                }
+                const { data } = await q;
+                const docs = data ? data.map(d => ({ id: d.id, data: () => d })) : [];
+                callback({ empty: docs.length === 0, docs, forEach: (cb) => docs.forEach(cb) });
+            } else if (ref._type === 'doc') {
+                const { data } = await sb.from(ref._name).select('*').eq('id', ref._id).maybeSingle();
+                callback({ exists: () => !!data, data: () => data, id: ref._id });
+            }
+        };
+        fetchData();
+        const interval = setInterval(fetchData, 3000);
+        return () => clearInterval(interval);
     };
     
     // ==========================================
