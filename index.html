@@ -1383,7 +1383,8 @@
     const doc = (db, name, id) => ({ _type: 'doc', _name: name, _id: id });
     const query = (coll, ...constraints) => ({ coll, constraints });
     const where = (field, op, value) => ({ type: 'where', field, op, value });
-
+    const limit = (n) => ({ type: 'limit', value: n });
+    
         const getDoc = async (ref) => {
         // استخدام maybeSingle لتفادي خطأ عند عدم وجود بيانات
         const { data, error } = await sb.from(ref._name).select('*').eq('id', ref._id).maybeSingle();
@@ -1391,17 +1392,22 @@
     };
 
     const getDocs = async (refOrQuery) => {
-        const tableName = refOrQuery._name || (refOrQuery.coll && refOrQuery.coll._name);
-        let q = sb.from(tableName).select('*');
-        if (refOrQuery.constraints) {
-            refOrQuery.constraints.forEach(c => {
-                if (c.type === 'where') {
-                    if (c.op === '==') q = q.eq(c.field, c.value);
-                    else if (c.op === 'in') q = q.in(c.field, c.value);
-                    else if (c.op === '>=') q = q.gte(c.field, c.value);
-                }
-            });
-        }
+    const tableName = refOrQuery._name || (refOrQuery.coll && refOrQuery.coll._name);
+    let q = sb.from(tableName).select('*');
+    if (refOrQuery.constraints) {
+        refOrQuery.constraints.forEach(c => {
+            if (c.type === 'where') {
+                if (c.op === '==') q = q.eq(c.field, c.value);
+                else if (c.op === 'in') q = q.in(c.field, c.value);
+                else if (c.op === '>=') q = q.gte(c.field, c.value);
+            } else if (c.type === 'limit') { // دعم دالة الليميت
+                q = q.limit(c.value);
+            }
+    
+    const { data } = await q;
+    const docs = data ? data.map(d => ({ id: d.id, data: () => d })) : [];
+    return { empty: docs.length === 0, docs, forEach: (cb) => docs.forEach(cb) };
+};
         const { data } = await q;
         const docs = data ? data.map(d => ({ id: d.id, data: () => d })) : [];
         return { empty: docs.length === 0, docs, forEach: (cb) => docs.forEach(cb) };
@@ -2988,7 +2994,7 @@ window.undoRespond = () => {
                 if (ctrlTitle.includes('لوحة:')) { 
                     const docName = ctrlTitle.replace('لوحة: ', '').trim(); 
                     const docData = allData.find(d => d.name === docName); 
-                    if (docData && docData.type === 'doctor') renderDoctorDashboard(docData); 
+                    if (docData && docData.type === 'doctor') renderDoctorDashboard(docData, bookings); 
                 } 
             }
         });
@@ -3696,14 +3702,13 @@ getDocs(collection(db, 'blood_requests')).then((snapshot) => {
 };
     window.openDoctorLogin = () => { openCtrlPanel('لوحة الطبيب', `<div class="max-w-sm mx-auto py-8"><div class="text-center mb-6"><div class="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-3" style="background: #DBEAFE"><i class="fas fa-user-md text-2xl" style="color: var(--doctor)"></i></div><h3 class="font-bold text-lg">دخول الطبيب</h3></div><form onsubmit="handleDoctorLogin(event)" class="flex flex-col gap-4"><input type="text" id="docName" class="ctrl-input text-center" placeholder="الاسم" required><input type="text" id="docPass" class="ctrl-input text-center font-mono" placeholder="كلمة المرور" required><button type="submit" class="w-full py-3 rounded-xl text-white font-bold text-sm" style="background: var(--doctor)">دخول</button></form></div>`, '#2563EB'); }
     window.handleDoctorLogin = (e) => { e.preventDefault(); const name = document.getElementById('docName').value.trim(); const pass = document.getElementById('docPass').value.trim().toUpperCase(); const docData = allData.find(d => d.name === name && d.bookingPass === pass); if (docData) { renderDoctorDashboard(docData); } else { showToast('بيانات غير صحيحة!'); } }
-    window.renderDoctorDashboard = (doc) => { 
-        // جلب أحدث الحجوزات من Firebase لضمان رؤية الطبيب للطلبات الجديدة (1 قراءة)
-        getDocs(collection(db, 'bookings')).then((snapshot) => {
-            bookings = [];
-            snapshot.forEach(d => bookings.push({ id: d.id, ...d.data() }));
-            
-            // الآن نعرض اللوحة بالبيانات المحدثة
-        const docBookings = bookings.filter(b => b.itemId === doc.id); 
+    window.renderDoctorDashboard = (doc, latestBookings = null) => { 
+    // استخدام البيانات الممررة من onSnapshot إن وجدت، لتجنب الاستدعاء المزدوج
+    if (latestBookings) {
+        bookings = latestBookings;
+    }
+    
+    const docBookings = bookings.filter(b => b.itemId === doc.id); 
         const daysCheckboxes = daysOfWeek.map(day => `<label class="flex items-center gap-2"><input type="checkbox" name="docWorkingDays" value="${day}" class="day-checkbox" ${doc.workingDays?.includes(day) ? 'checked' : ''}><span class="text-sm">${day}</span></label>`).join(''); 
         const bookingsListHtml = docBookings.length === 0 ? '<p class="text-sm text-center py-4" style="color: var(--muted)">لا توجد طلبات.</p>' : docBookings.map(b => { 
             let statusBadge = ''; let actionButtons = ''; 
@@ -4540,33 +4545,60 @@ getDocs(collection(db, 'blood_requests')).then((snapshot) => {
     let adInterval = null;
 
        window.renderAdSlide = (index) => {
-           
-        const container = document.getElementById('homeAdContainer');
-        const dotsContainer = document.getElementById('adDots');
-        if (!container || activeAds.length === 0) return;
+    const container = document.getElementById('homeAdContainer');
+    const dotsContainer = document.getElementById('adDots');
+    if (!container || activeAds.length === 0) return;
 
-        const ad = activeAds[index];
-        let mediaHTML = '';
+    const ad = activeAds[index];
+    let mediaHTML = '';
 
-        // تنظيف أي مؤقت سابق
-        if (adInterval) { clearTimeout(adInterval); clearInterval(adInterval); adInterval = null; }
+    if (adInterval) { clearTimeout(adInterval); clearInterval(adInterval); adInterval = null; }
+    const isSingleAd = activeAds.length === 1;
 
-        const isSingleAd = activeAds.length === 1;
+    if (ad.type === 'image') {
+        mediaHTML = `<a href="${ad.link || '#'}" target="_blank" class="block w-full h-full">
+            <img src="${ad.content}" alt="إعلان" class="w-full h-full object-cover transition-opacity duration-500">
+        </a>`;
+        if (!isSingleAd) {
+            adInterval = setTimeout(nextAdSlide, 6000);
+        }
+    } else if (ad.type === 'video') {
+        const loopAttr = isSingleAd ? 'loop' : '';
+        const endedAttr = isSingleAd ? '' : 'onended="nextAdSlide()"';
+        
+        // === التعديل السحري هنا: منع الحلقة اللانهائية ===
+        // إذا كان هناك إعلان واحد فقط وفشل تحميل الفيديو، سنقوم بإخفاء القسم بدلاً من محاولة إعادة التحميل
+        const errorAttr = isSingleAd 
+            ? 'onerror="document.getElementById(\'homeMediaAdsSection\').classList.add(\'hidden\')"' 
+            : 'onerror="nextAdSlide()"';
 
-        if (ad.type === 'image') {
-            mediaHTML = `<a href="${ad.link || '#'}" target="_blank" class="block w-full h-full">
-                <img src="${ad.content}" alt="إعلان" class="w-full h-full object-cover transition-opacity duration-500">
-            </a>`;
-            
-            // للصور: ننتقل بعد 6 ثوانٍ ثابتة
-            if (!isSingleAd) {
-                adInterval = setTimeout(nextAdSlide, 6000);
-            }
-            
-        } else if (ad.type === 'video') {
-            const loopAttr = isSingleAd ? 'loop' : '';
-            const endedAttr = isSingleAd ? '' : 'onended="nextAdSlide()"';
-            
+        mediaHTML = `<div class="relative w-full h-full bg-black overflow-hidden">
+            <video id="homeAdVideo" autoplay muted playsinline preload="auto" ${loopAttr} ${endedAttr} ${errorAttr} onloadedmetadata="setupVideoFallback(this)" onwaiting="pauseAdFallback()" onplaying="resumeAdFallback(this)" class="w-full h-full object-cover">
+                <source src="${ad.content}" type="video/mp4">
+                متصفحك لا يدعم تشغيل الفيديو المباشر.
+            </video>
+            <button onclick="toggleAdVideoSound()" class="absolute top-3 right-3 bg-black/50 hover:bg-black/70 text-white w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-sm z-30 transition-all">
+                <i class="fas fa-volume-xmark" id="adVideoSoundIcon"></i>
+            </button>
+        </div>`;
+        
+        if (!isSingleAd) {
+            adInterval = setTimeout(nextAdSlide, 30000);
+        }
+    }
+
+    container.innerHTML = `<div class="w-full h-full transition-opacity duration-500">${mediaHTML}</div>`;
+    
+    if (dotsContainer) {
+        if (isSingleAd) {
+            dotsContainer.innerHTML = '';
+        } else {
+            dotsContainer.innerHTML = activeAds.map((_, i) => `
+                <span class="w-2 h-2 rounded-full bg-white/50 cursor-pointer transition-all ${i === index ? 'w-6 bg-white' : ''}" onclick="goToAdSlide(${i})"></span>
+            `).join('');
+        }
+    }
+}
             // إضافة onloadedmetadata لقراءة مدة الفيديو، و onwaiting/onplaying لإيقاف المؤقت وقت التحميل
             mediaHTML = `<div class="relative w-full h-full bg-black overflow-hidden">
                 <video id="homeAdVideo" autoplay muted playsinline preload="auto" ${loopAttr} ${endedAttr} onerror="nextAdSlide()" onloadedmetadata="setupVideoFallback(this)" onwaiting="pauseAdFallback()" onplaying="resumeAdFallback(this)" class="w-full h-full object-cover">
