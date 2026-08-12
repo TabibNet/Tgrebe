@@ -1367,161 +1367,22 @@
         new google.translate.TranslateElement({pageLanguage: 'ar', includedLanguages: 'en', autoDisplay: false}, 'google_translate_element');
     }
 </script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-    // ==========================================
-    // 1. إعداد Supabase والطبقة الوسيطة (Wrapper)
-    // ==========================================
-    const SUPABASE_URL = 'https://pzwhyoattlravuadbfvk.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6d2h5b2F0dGxyYXZ1YWRiZnZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzMzMyNDIsImV4cCI6MjEwMTkwOTI0Mn0.zBPnp7rVpR5ojidhuUCSQyUhA5VTFSCQosG_XtFXBWo';
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    const db = {}; // كائن وهمي للتوافق مع أكوادك القديمة
-
-    // دوال مساعدة لتحويل أوامر Firebase إلى Supabase
-    const increment = (n) => ({ __increment: n });
-    const collection = (db, name) => ({ _type: 'collection', _name: name });
-    const doc = (db, name, id) => ({ _type: 'doc', _name: name, _id: id });
-    const query = (coll, ...constraints) => ({ coll, constraints });
-    const where = (field, op, value) => ({ type: 'where', field, op, value });
-    const limit = (n) => ({ type: 'limit', value: n });
-    
-        const getDoc = async (ref) => {
-        // استخدام maybeSingle لتفادي خطأ عند عدم وجود بيانات
-        const { data, error } = await sb.from(ref._name).select('*').eq('id', ref._id).maybeSingle();
-        return { exists: () => !!data && !error, data: () => data, id: ref._id };
+<script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+<script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, onSnapshot, setDoc, query, where, increment, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    const firebaseConfig = {
+        apiKey: "AIzaSyAHQhRHtRb-MN5HkEd_MwJqMIbDbfKwuX0",
+        authDomain: "raheba-med.firebaseapp.com",
+        projectId: "raheba-med",
+        storageBucket: "raheba-med.firebasestorage.app",
+        messagingSenderId: "480762213801",
+        appId: "1:480762213801:web:ef8b48253995a077b940b8",
+        measurementId: "G-7ZMMYD9NL9"
     };
 
-        const getDocs = async (refOrQuery) => {
-        const tableName = refOrQuery._name || (refOrQuery.coll && refOrQuery.coll._name);
-        let q = sb.from(tableName).select('*');
-        if (refOrQuery.constraints) {
-            refOrQuery.constraints.forEach(c => {
-                if (c.type === 'where') {
-                    if (c.op === '==') q = q.eq(c.field, c.value);
-                    else if (c.op === 'in') q = q.in(c.field, c.value);
-                    else if (c.op === '>=') q = q.gte(c.field, c.value);
-                } else if (c.type === 'limit') { // دعم دالة الليميت
-                    q = q.limit(c.value);
-                }
-            });
-        }
-        const { data } = await q;
-        const docs = data ? data.map(d => ({ id: d.id, data: () => d })) : [];
-        return { empty: docs.length === 0, docs, forEach: (cb) => docs.forEach(cb) };
-    };
-        const addDoc = async (coll, data) => {
-        const { data: newDoc, error } = await sb.from(coll._name).insert([data]).select();
-        if (error) {
-            console.error('AddDoc Error:', error);
-            showToast('خطأ في الإضافة: ' + error.message); // إظهار الخطأ للمستخدم
-            throw error;
-        }
-        return { id: newDoc && newDoc[0] ? newDoc[0].id : null };
-    };
-
-        const getDoc = async (ref) => {
-        const { data, error } = await sb.from(ref._name).select('*').eq('id', ref._id).maybeSingle();
-        return { exists: () => !!data && !error, data: () => data, id: ref._id };
-    };
-
-    const getDocs = async (refOrQuery) => {
-        const tableName = refOrQuery._name || (refOrQuery.coll && refOrQuery.coll._name);
-        let q = sb.from(tableName).select('*');
-        if (refOrQuery.constraints) {
-            refOrQuery.constraints.forEach(c => {
-                if (c.type === 'where') {
-                    if (c.op === '==') q = q.eq(c.field, c.value);
-                    else if (c.op === 'in') q = q.in(c.field, c.value);
-                    else if (c.op === '>=') q = q.gte(c.field, c.value);
-                }
-            });
-        }
-        const { data } = await q;
-        const docs = data ? data.map(d => ({ id: d.id, data: () => d })) : [];
-        return { empty: docs.length === 0, docs, forEach: (cb) => docs.forEach(cb) };
-    };
-
-    const addDoc = async (coll, data) => {
-        const { data: newDoc, error } = await sb.from(coll._name).insert([data]).select();
-        if (error) {
-            console.error('AddDoc Error:', error);
-            showToast('خطأ في الإضافة: ' + error.message);
-            throw error;
-        }
-        return { id: newDoc && newDoc[0] ? newDoc[0].id : null };
-    };
-
-    const updateDoc = async (ref, data) => {
-        const processedData = { ...data };
-        for (const key in processedData) {
-            if (processedData[key] && processedData[key].__increment !== undefined) {
-                const { data: current } = await sb.from(ref._name).select(key).eq('id', ref._id).maybeSingle();
-                processedData[key] = (current && current[key] || 0) + processedData[key].__increment;
-            }
-        }
-        const { error } = await sb.from(ref._name).update(processedData).eq('id', ref._id);
-        if (error) {
-            console.error('UpdateDoc Error:', error);
-            showToast('خطأ في التحديث: ' + error.message);
-            throw error;
-        }
-    };
-
-    const deleteDoc = async (ref) => { 
-        const { error } = await sb.from(ref._name).delete().eq('id', ref._id);
-        if (error) {
-            console.error('DeleteDoc Error:', error);
-            showToast('خطأ في الحذف: ' + error.message);
-            throw error;
-        }
-    };
-
-    const setDoc = async (ref, data, opts) => {
-        const processedData = { ...data };
-        for (const key in processedData) {
-            if (processedData[key] && processedData[key].__increment !== undefined) {
-                const { data: current } = await sb.from(ref._name).select(key).eq('id', ref._id).maybeSingle();
-                processedData[key] = (current && current[key] || 0) + processedData[key].__increment;
-            }
-        }
-        const { error } = await sb.from(ref._name).upsert({ ...processedData, id: ref._id });
-        if (error) {
-            console.error('SetDoc Error:', error);
-            showToast('خطأ في الحفظ: ' + error.message);
-            throw error;
-        }
-    };
-
-    const onSnapshot = (ref, callback) => {
-        const fetchData = async () => {
-            if (ref._type === 'collection' || (ref.coll && ref.coll._type === 'collection')) {
-                const tableName = ref._name || (ref.coll && ref.coll._name);
-                let q = sb.from(tableName).select('*');
-                if (ref.constraints) {
-                    ref.constraints.forEach(c => {
-                        if (c.type === 'where') {
-                            if (c.op === '==') q = q.eq(c.field, c.value);
-                            else if (c.op === 'in') q = q.in(c.field, c.value);
-                            else if (c.op === '>=') q = q.gte(c.field, c.value);
-                        }
-                    });
-                }
-                const { data } = await q;
-                const docs = data ? data.map(d => ({ id: d.id, data: () => d })) : [];
-                callback({ empty: docs.length === 0, docs, forEach: (cb) => docs.forEach(cb) });
-            } else if (ref._type === 'doc') {
-                const { data } = await sb.from(ref._name).select('*').eq('id', ref._id).maybeSingle();
-                callback({ exists: () => !!data, data: () => data, id: ref._id });
-            }
-        };
-        fetchData();
-        const interval = setInterval(fetchData, 3000);
-        return () => clearInterval(interval);
-    };
-    
-    // ==========================================
-    // 2. بداية كودك الأصلي (يبقى كما هو بالكامل)
-    // ==========================================
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
     const IMGBB_API_KEY = "8a92929a2c1c90634ffc7ba88f2d481d"; 
                 window.setupOneSignal = async () => {
         if (!window.OneSignalDeferred) { 
@@ -2991,7 +2852,7 @@ window.undoRespond = () => {
                 if (ctrlTitle.includes('لوحة:')) { 
                     const docName = ctrlTitle.replace('لوحة: ', '').trim(); 
                     const docData = allData.find(d => d.name === docName); 
-                    if (docData && docData.type === 'doctor') renderDoctorDashboard(docData, bookings); 
+                    if (docData && docData.type === 'doctor') renderDoctorDashboard(docData); 
                 } 
             }
         });
@@ -3699,13 +3560,14 @@ getDocs(collection(db, 'blood_requests')).then((snapshot) => {
 };
     window.openDoctorLogin = () => { openCtrlPanel('لوحة الطبيب', `<div class="max-w-sm mx-auto py-8"><div class="text-center mb-6"><div class="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-3" style="background: #DBEAFE"><i class="fas fa-user-md text-2xl" style="color: var(--doctor)"></i></div><h3 class="font-bold text-lg">دخول الطبيب</h3></div><form onsubmit="handleDoctorLogin(event)" class="flex flex-col gap-4"><input type="text" id="docName" class="ctrl-input text-center" placeholder="الاسم" required><input type="text" id="docPass" class="ctrl-input text-center font-mono" placeholder="كلمة المرور" required><button type="submit" class="w-full py-3 rounded-xl text-white font-bold text-sm" style="background: var(--doctor)">دخول</button></form></div>`, '#2563EB'); }
     window.handleDoctorLogin = (e) => { e.preventDefault(); const name = document.getElementById('docName').value.trim(); const pass = document.getElementById('docPass').value.trim().toUpperCase(); const docData = allData.find(d => d.name === name && d.bookingPass === pass); if (docData) { renderDoctorDashboard(docData); } else { showToast('بيانات غير صحيحة!'); } }
-    window.renderDoctorDashboard = (doc, latestBookings = null) => { 
-    // استخدام البيانات الممررة من onSnapshot إن وجدت، لتجنب الاستدعاء المزدوج
-    if (latestBookings) {
-        bookings = latestBookings;
-    }
-    
-    const docBookings = bookings.filter(b => b.itemId === doc.id); 
+    window.renderDoctorDashboard = (doc) => { 
+        // جلب أحدث الحجوزات من Firebase لضمان رؤية الطبيب للطلبات الجديدة (1 قراءة)
+        getDocs(collection(db, 'bookings')).then((snapshot) => {
+            bookings = [];
+            snapshot.forEach(d => bookings.push({ id: d.id, ...d.data() }));
+            
+            // الآن نعرض اللوحة بالبيانات المحدثة
+        const docBookings = bookings.filter(b => b.itemId === doc.id); 
         const daysCheckboxes = daysOfWeek.map(day => `<label class="flex items-center gap-2"><input type="checkbox" name="docWorkingDays" value="${day}" class="day-checkbox" ${doc.workingDays?.includes(day) ? 'checked' : ''}><span class="text-sm">${day}</span></label>`).join(''); 
         const bookingsListHtml = docBookings.length === 0 ? '<p class="text-sm text-center py-4" style="color: var(--muted)">لا توجد طلبات.</p>' : docBookings.map(b => { 
             let statusBadge = ''; let actionButtons = ''; 
@@ -3718,6 +3580,7 @@ getDocs(collection(db, 'blood_requests')).then((snapshot) => {
         }).join('');
         openCtrlPanel(`لوحة: ${doc.name}`, `<div class="flex flex-col gap-5"><div class="bg-white p-5 rounded-xl border flex items-center gap-4" style="border-color: var(--border)"><img src="${doc.image}" class="w-20 h-20 rounded-2xl object-cover"><div><h3 class="font-bold text-lg">${doc.name}</h3><p class="text-sm" style="color: var(--doctor)">${doc.specialty}</p></div></div><div class="bg-white p-3 rounded-xl border flex items-center justify-between gap-2 mb-3" style="border-color: var(--border);"><span class="text-sm font-bold text-gray-700">حالة العمل:</span><div class="flex gap-1 bg-gray-50 p-1 rounded-lg"><button onclick="setStatus('${doc.id}', true)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${doc.isOpen === true ? 'bg-green-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">مفتوح</button><button onclick="setStatus('${doc.id}', false)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${doc.isOpen === false ? 'bg-red-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">مغلق</button><button onclick="setStatus('${doc.id}', null)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${doc.isOpen == null ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">لا شيء</button></div></div><button onclick="openDoctorScanner('${doc.id}')" class="w-full py-3 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2 mt-2" style="background: #0D9488"><i class="fas fa-qrcode"></i> قراءة الملف الصحي للمريض (QR)</button><button onclick="openAskDoctor('${doc.name}')" class="w-full py-3 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2 mb-3" style="background: #0EA5E9"><i class="fas fa-comments"></i> الإجابة على أسئلة المرضى</button><div class="bg-white p-5 rounded-xl border" style="border-color: var(--border)"><h4 class="font-bold mb-4 text-sm"><i class="fas fa-calendar-day ml-2" style="color: var(--doctor)"></i> طلبات المواعيد (${docBookings.length})</h4><div class="flex flex-col gap-2">${bookingsListHtml}</div></div><div class="bg-white p-5 rounded-xl border" style="border-color: var(--border)"><h4 class="font-bold mb-4 text-sm"><i class="fas fa-cog ml-2"></i> أيام العمل</h4><div class="mb-4 grid grid-cols-4 sm:grid-cols-7 gap-2">${daysCheckboxes}</div><button onclick="saveDoctorSettings('${doc.id}')" class="w-full py-2.5 rounded-xl text-white font-semibold text-sm" style="background: var(--doctor)">حفظ</button></div></div>`, '#2563EB'); 
     
+     }); 
 };                                            
             window.acceptBooking = async (bookingId) => { 
         const timeInput = document.getElementById(`time_${bookingId}`); const time = timeInput.value.trim(); 
@@ -4540,60 +4403,63 @@ getDocs(collection(db, 'blood_requests')).then((snapshot) => {
     let currentAdIndex = 0;
     let adInterval = null;
 
-           window.renderAdSlide = (index) => {
-    const container = document.getElementById('homeAdContainer');
-    const dotsContainer = document.getElementById('adDots');
-    if (!container || activeAds.length === 0) return;
+       window.renderAdSlide = (index) => {
+           
+        const container = document.getElementById('homeAdContainer');
+        const dotsContainer = document.getElementById('adDots');
+        if (!container || activeAds.length === 0) return;
 
-    const ad = activeAds[index];
-    let mediaHTML = '';
+        const ad = activeAds[index];
+        let mediaHTML = '';
 
-    if (adInterval) { clearTimeout(adInterval); clearInterval(adInterval); adInterval = null; }
-    const isSingleAd = activeAds.length === 1;
+        // تنظيف أي مؤقت سابق
+        if (adInterval) { clearTimeout(adInterval); clearInterval(adInterval); adInterval = null; }
 
-    if (ad.type === 'image') {
-        mediaHTML = `<a href="${ad.link || '#'}" target="_blank" class="block w-full h-full">
-            <img src="${ad.content}" alt="إعلان" class="w-full h-full object-cover transition-opacity duration-500">
-        </a>`;
-        if (!isSingleAd) {
-            adInterval = setTimeout(nextAdSlide, 6000);
+        const isSingleAd = activeAds.length === 1;
+
+        if (ad.type === 'image') {
+            mediaHTML = `<a href="${ad.link || '#'}" target="_blank" class="block w-full h-full">
+                <img src="${ad.content}" alt="إعلان" class="w-full h-full object-cover transition-opacity duration-500">
+            </a>`;
+            
+            // للصور: ننتقل بعد 6 ثوانٍ ثابتة
+            if (!isSingleAd) {
+                adInterval = setTimeout(nextAdSlide, 6000);
+            }
+            
+        } else if (ad.type === 'video') {
+            const loopAttr = isSingleAd ? 'loop' : '';
+            const endedAttr = isSingleAd ? '' : 'onended="nextAdSlide()"';
+            
+            // إضافة onloadedmetadata لقراءة مدة الفيديو، و onwaiting/onplaying لإيقاف المؤقت وقت التحميل
+            mediaHTML = `<div class="relative w-full h-full bg-black overflow-hidden">
+                <video id="homeAdVideo" autoplay muted playsinline preload="auto" ${loopAttr} ${endedAttr} onerror="nextAdSlide()" onloadedmetadata="setupVideoFallback(this)" onwaiting="pauseAdFallback()" onplaying="resumeAdFallback(this)" class="w-full h-full object-cover">
+                    <source src="${ad.content}" type="video/mp4">
+                    متصفحك لا يدعم تشغيل الفيديو المباشر.
+                </video>
+                <button onclick="toggleAdVideoSound()" class="absolute top-3 right-3 bg-black/50 hover:bg-black/70 text-white w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-sm z-30 transition-all">
+                    <i class="fas fa-volume-xmark" id="adVideoSoundIcon"></i>
+                </button>
+            </div>`;
+            
+            // مؤقت احتياطي افتراضي (30 ثانية) فقط في حال فشل قراءة مدة الفيديو
+            if (!isSingleAd) {
+                adInterval = setTimeout(nextAdSlide, 30000);
+            }
         }
-    } else if (ad.type === 'video') {
-        const loopAttr = isSingleAd ? 'loop' : '';
-        const endedAttr = isSingleAd ? '' : 'onended="nextAdSlide()"';
-        
-        // منع الحلقة اللانهائية: إذا كان إعلان واحد وفشل، أخفِ القسم
-        const errorAttr = isSingleAd 
-            ? 'onerror="document.getElementById(\'homeMediaAdsSection\').classList.add(\'hidden\')"' 
-            : 'onerror="nextAdSlide()"';
 
-        mediaHTML = `<div class="relative w-full h-full bg-black overflow-hidden">
-            <video id="homeAdVideo" autoplay muted playsinline preload="auto" ${loopAttr} ${endedAttr} ${errorAttr} onloadedmetadata="setupVideoFallback(this)" onwaiting="pauseAdFallback()" onplaying="resumeAdFallback(this)" class="w-full h-full object-cover">
-                <source src="${ad.content}" type="video/mp4">
-                متصفحك لا يدعم تشغيل الفيديو المباشر.
-            </video>
-            <button onclick="toggleAdVideoSound()" class="absolute top-3 right-3 bg-black/50 hover:bg-black/70 text-white w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-sm z-30 transition-all">
-                <i class="fas fa-volume-xmark" id="adVideoSoundIcon"></i>
-            </button>
-        </div>`;
+        container.innerHTML = `<div class="w-full h-full transition-opacity duration-500">${mediaHTML}</div>`;
         
-        if (!isSingleAd) {
-            adInterval = setTimeout(nextAdSlide, 30000);
+        if (dotsContainer) {
+            if (isSingleAd) {
+                dotsContainer.innerHTML = '';
+            } else {
+                dotsContainer.innerHTML = activeAds.map((_, i) => `
+                    <span class="w-2 h-2 rounded-full bg-white/50 cursor-pointer transition-all ${i === index ? 'w-6 bg-white' : ''}" onclick="goToAdSlide(${i})"></span>
+                `).join('');
+            }
         }
     }
-
-    container.innerHTML = `<div class="w-full h-full transition-opacity duration-500">${mediaHTML}</div>`;
-    
-    if (dotsContainer) {
-        if (isSingleAd) {
-            dotsContainer.innerHTML = '';
-        } else {
-            dotsContainer.innerHTML = activeAds.map((_, i) => `
-                <span class="w-2 h-2 rounded-full bg-white/50 cursor-pointer transition-all ${i === index ? 'w-6 bg-white' : ''}" onclick="goToAdSlide(${i})"></span>
-            `).join('');
-        }
-    }
-}
 
     // === دوال جديدة للتحكم الذكي بوقت الفيديو ===
 
