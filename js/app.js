@@ -740,14 +740,15 @@ window.fetchPatientHealthFile = async (userId, doctorData) => {
             }
         }
 
-        document.getElementById('modalContent').innerHTML = `<div class="p-6"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-lg"><i class="fas fa-file-medical ml-2" style="color: var(--doctor)"></i> الملف الصحي للمريض</h3><button onclick="closeModal()" class="text-2xl">&times;</button><button onclick="openPrescriptionModal('${userId}', '${p.full_name}')" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg"><i class="fas fa-file-prescription"></i> إنشاء روشتة</button></div><div class="flex flex-col gap-3"><div class="flex items-center gap-4 p-3 rounded-xl" style="background: #DBEAFE"><i class="fas fa-user-circle text-3xl" style="color: var(--doctor)"></i><div><h4 class="font-bold text-lg">${p.full_name}</h4><p class="text-sm text-gray-600">${p.age || '-'} سنة | ${p.gender || '-'}</p></div></div><div class="grid grid-cols-2 gap-3 text-sm"><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500">فصيلة الدم</div><div class="font-bold text-red-600">${p.blood_type || 'غير محدد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500">الوزن</div><div class="font-bold">${p.weight || '-'} كغ</div></div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الأمراض المزمنة</div><div class="font-semibold">${p.diseases || 'لا يوجد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الحساسية</div><div class="font-semibold text-red-600">${p.allergies || 'لا يوجد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الأدوية الحالية</div><div class="font-semibold">${p.medications || 'لا يوجد'}</div></div>${specializedRecordHtml}<div class="p-3 rounded-xl bg-green-50 border border-green-200"><div class="text-xs text-green-700 mb-1">جهة طوارئ</div><div class="font-semibold">${p.emergency_name || ''} - <span dir="ltr">${p.emergency_phone || ''}</span></div></div></div></div>`;
+        document.getElementById('modalContent').innerHTML = `<div class="p-6"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-lg"><i class="fas fa-file-medical ml-2" style="color: var(--doctor)"></i> الملف الصحي للمريض</h3><button onclick="closeModal()" class="text-2xl">&times;</button><button onclick="openPrescriptionModal('${userId}', '${p.full_name}', '${doctorData?.name || 'طبيب'}')" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg"><i class="fas fa-file-prescription"></i> إنشاء روشتة</button></div><div class="flex flex-col gap-3"><div class="flex items-center gap-4 p-3 rounded-xl" style="background: #DBEAFE"><i class="fas fa-user-circle text-3xl" style="color: var(--doctor)"></i><div><h4 class="font-bold text-lg">${p.full_name}</h4><p class="text-sm text-gray-600">${p.age || '-'} سنة | ${p.gender || '-'}</p></div></div><div class="grid grid-cols-2 gap-3 text-sm"><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500">فصيلة الدم</div><div class="font-bold text-red-600">${p.blood_type || 'غير محدد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500">الوزن</div><div class="font-bold">${p.weight || '-'} كغ</div></div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الأمراض المزمنة</div><div class="font-semibold">${p.diseases || 'لا يوجد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الحساسية</div><div class="font-semibold text-red-600">${p.allergies || 'لا يوجد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الأدوية الحالية</div><div class="font-semibold">${p.medications || 'لا يوجد'}</div></div>${specializedRecordHtml}<div class="p-3 rounded-xl bg-green-50 border border-green-200"><div class="text-xs text-green-700 mb-1">جهة طوارئ</div><div class="font-semibold">${p.emergency_name || ''} - <span dir="ltr">${p.emergency_phone || ''}</span></div></div></div></div>`;
         document.getElementById('modalOverlay').classList.add('active');
         lockScroll();
     } catch (e) { showToast("خطأ في قراءة الملف."); }
 }
 
 // === 2. Digital Prescription (الروشتة الإلكترونية) ===
-window.openPrescriptionModal = (patientId, patientName) => {
+window.openPrescriptionModal = (patientId, patientName, doctorName) => {
+    window.currentDoctorName = doctorName || 'طبيب'; // حفظ اسم الطبيب ليستخدم عند الحفظ
     closeModal(); 
     document.getElementById('modalContent').innerHTML = `
         <div class="p-6">
@@ -819,7 +820,7 @@ window.generatePrescription = async (e, patientId, patientName) => {
     if (notes) rxText += `\n📝 *ملاحظات:* ${notes}\n`;
     rxText += `_______________________\nيرجى الالتزام بالجرعات ولا تنسَ المراجعة.`;
 
-    const doctorName = document.getElementById('ctrlTitle')?.textContent.replace('لوحة: ', '').trim() || 'طبيب';
+    const doctorName = window.currentDoctorName || 'طبيب'; // استخدام اسم الطبيب المحفوظ
 
     try {
         const { data: docSnap, error } = await supabase.from('health_files').select('prescriptions').eq('id', patientId).single();
