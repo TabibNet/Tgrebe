@@ -493,8 +493,14 @@ window.closeCtrlPanel = (event) => {
     if (event && event.target.id !== 'ctrlOverlay') return; 
     document.getElementById('ctrlOverlay').classList.remove('active'); 
     unlockScroll(); 
-    if (unsubscribeMedRequests) { unsubscribeMedRequests = null; } 
-    if (activeFollowupUnsub) { activeFollowupUnsub = null; } 
+    if (unsubscribeMedRequests) { 
+        supabase.removeChannel(unsubscribeMedRequests); 
+        unsubscribeMedRequests = null; 
+    } 
+    if (activeFollowupUnsub) { 
+        supabase.removeChannel(activeFollowupUnsub); 
+        activeFollowupUnsub = null; 
+    } 
     currentFollowupBookingId = null;
 }
 
@@ -619,19 +625,20 @@ window.handlePharmacyLogin = (e) => { e.preventDefault(); const name = document.
 window.renderPharmacyDashboard = (pharm) => { 
     openCtrlPanel(`لوحة تحكم: ${pharm.name}`, `<div class="flex flex-col gap-5"><div class="bg-white p-5 rounded-xl border flex items-center justify-between flex-col sm:flex-row gap-4" style="border-color: var(--border)"><div class="flex items-center gap-4"><img src="${pharm.image}" class="w-20 h-20 rounded-2xl object-cover"><div><h3 class="font-bold text-lg">${pharm.name}</h3><p class="text-sm" style="color: var(--pharmacy)">صيدلية</p></div></div><div class="bg-white p-3 rounded-xl border flex items-center justify-between gap-2 mb-3" style="border-color: var(--border);"><span class="text-sm font-bold text-gray-700">حالة العمل:</span><div class="flex gap-1 bg-gray-50 p-1 rounded-lg"><button onclick="setStatus('${pharm.id}', true)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${pharm.isopen === true ? 'bg-green-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">مفتوح</button><button onclick="setStatus('${pharm.id}', false)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${pharm.isopen === false ? 'bg-red-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">مغلق</button><button onclick="setStatus('${pharm.id}', null)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${pharm.isopen == null ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">لا شيء</button></div></div><button onclick="toggleNightShift('${pharm.id}', ${!pharm.night})" class="w-full px-4 py-2 rounded-xl font-bold text-sm ${pharm.night ? 'bg-yellow-500 text-white' : 'bg-gray-200'}">${pharm.night ? 'إيقاف المناوبة الليلية' : 'تفعيل المناوبة الليلية'}</button></div><div class="bg-white p-5 rounded-xl border" style="border-color: var(--border)"><h4 class="font-bold mb-4 text-sm">طلبات الأدوية الواردة</h4><div id="requestsContainer" class="flex flex-col gap-3"><p class="text-center py-10" style="color: var(--muted)">جاري تحميل الطلبات...</p></div></div></div>`, '#0E7C5F'); 
     
-    if (unsubscribeMedRequests) clearInterval(unsubscribeMedRequests); 
-    fetchMedRequests(pharm.name);
-    unsubscribeMedRequests = setInterval(() => fetchMedRequests(pharm.name), 7000);
-}
+    // 1. إزالة أي اشتراك سابق لتجنب التكرار
+    if (unsubscribeMedRequests) { 
+        supabase.removeChannel(unsubscribeMedRequests); 
+        unsubscribeMedRequests = null; 
+    } 
 
-async function fetchMedRequests(pharmName) {
+    // 2. جلب الطلبات للمرة الأولى
+    async function fetchMedRequests(pharmName) {
     const container = document.getElementById('requestsContainer'); 
     if (!container) return; 
-    container.innerHTML = '<p class="text-center py-10" style="color: var(--muted)">جاري تحديث الطلبات...</p>';
     
     const { data: snapshot, error } = await supabase.from('medicine_requests').select('*').in('status', ['active', 'searching', 'available', 'unavailable']); 
-    if (error) { container.innerHTML = '<p class="text-center py-10 text-red-500">حدث خطأ.</p>'; return; }
-    if (snapshot.length === 0) { container.innerHTML = '<p class="text-center py-10" style="color: var(--muted)">لا توجد طلبات أدوية حالياً.</p>'; return; } 
+    if (error) { container.innerHTML = '<p class="text-center py-10 text-red-500">حدث خطأ أثناء تحميل الطلبات.</p>'; return; }
+    if (!snapshot || snapshot.length === 0) { container.innerHTML = '<p class="text-center py-10" style="color: var(--muted)">لا توجد طلبات أدوية حالياً.</p>'; return; } 
     
     let html = ''; 
     snapshot.forEach(req => { 
@@ -659,6 +666,15 @@ async function fetchMedRequests(pharmName) {
         html += `<div class="bg-white border rounded-xl p-4 flex flex-col gap-3" style="border-color: var(--border)"><div class="flex flex-col sm:flex-row gap-3 items-center">${req.image_url ? `<img src="${req.image_url}" class="w-full sm:w-24 h-24 object-cover rounded-lg cursor-zoom-in" onclick="openLightbox('${req.image_url}')">` : ''}<div class="flex-1 text-center sm:text-right"><h4 class="font-bold">${req.patient_name} <span class="text-xs text-yellow-600 font-mono">#${req.med_ref || ''}</span></h4><p class="text-sm text-gray-700 font-semibold">${req.med_list || ''}</p><p class="text-xs mt-1 text-red-500">الإلحاح: ${req.urgency || 'عادي'}</p><p class="text-xs" style="color: var(--muted)"><i class="fas fa-clock"></i> ${date}</p>${requestStatus}</div></div><div class="flex flex-col gap-2 mt-2 border-t pt-3" style="border-color: var(--border)">${interactionArea}</div></div>`; 
     }); 
     container.innerHTML = html; 
+}
+
+    // 3. تفعيل التحديث الحي (Realtime) - يتحدث فقط عند تغير البيانات
+    unsubscribeMedRequests = supabase
+        .channel('medicine_requests_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'medicine_requests' }, payload => {
+            fetchMedRequests(pharm.name); // إعادة جلب البيانات عند حدوث أي تغيير
+        })
+        .subscribe();
 }
 
 window.toggleNightShift = async (id, currentStatus) => { try { await supabase.from('listings').update({ night: currentStatus }).eq('id', id); showToast(currentStatus ? 'تم تفعيل المناوبة!' : 'تم إيقاف المناوبة.'); localStorage.setItem('force_listings_update', 'true'); } catch (e) { showToast('خطأ في التحديث'); } }
@@ -957,12 +973,24 @@ window.setStatus = async (id, status) => {
         showToast(msg);
     } catch (e) { showToast('حدث خطأ'); }
 }
-
+//دالة ابحث عن دوائك============
 window.openMedicineFinder = () => { 
-    document.getElementById('modalContent').innerHTML = `<div class="p-6"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-lg"><i class="fas fa-pills ml-2" style="color: var(--gold)"></i> ابحث عن دوائك</h3><button onclick="closeModal()" class="text-2xl">&times;</button></div><div class="mb-4 p-3 rounded-xl text-sm" style="background: var(--accent-light); color: var(--accent-dark)">اكتب الأدوية المطلوبة وسنتولى إرسالها للصيدليات.</div><form onsubmit="submitMedicineRequest(event)"><div class="mb-4"><label class="block text-sm font-semibold mb-2">الأدوية المطلوبة</label><textarea id="medList" class="ctrl-input" rows="3" placeholder="مثال: كونكور 5مغ" required></textarea></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4"><div><label class="block text-sm font-semibold mb-2">اسم المريض</label><input type="text" id="medName" class="ctrl-input" placeholder="اكتب اسمك"></div><div><label class="block text-sm font-semibold mb-2">رقم الهاتف</label><input type="tel" id="medPhone" class="ctrl-input" placeholder="09XXXXXXXX" required></div></div><div class="mb-4"><label class="block text-sm font-semibold mb-2">مستوى الإلحاح</label><select id="medUrgency" class="ctrl-input"><option value="عاجل جداً (طوارئ)">عاجل جداً (طوارئ)</option><option value="عاجل (خلال اليوم)">عاجل (خلال اليوم)</option><option value="عادي" selected>عادي</option></select></div><div class="mb-6"><label class="block text-sm font-semibold mb-2">صورة الوصفة الطبية (اختياري)</label><div class="file-input-wrapper"><label class="file-input-label" for="medImage"><i class="fas fa-camera text-2xl mb-2"></i><span>اضغط لاختيار صورة</span><img id="imagePreview" class="preview-image hidden" src="" alt="معاينة"></label><input type="file" id="medImage" accept="image/*" onchange="previewMedicineImage(event)"></div></div><button type="submit" id="medSubmitBtn" class="w-full py-3.5 rounded-xl text-white font-bold text-sm" style="background: var(--accent)"><i class="fas fa-paper-plane"></i> إرسال للصيدليات</button></form></div>`; 
-    document.getElementById('modalOverlay').classList.add('active'); lockScroll(); 
+    document.getElementById('modalContent').innerHTML = `<div class="p-6"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-lg" style="font-family: 'Noto Kufi Arabic'"><i class="fas fa-pills ml-2" style="color: var(--gold)"></i> ابحث عن دوائك</h3><button onclick="closeModal()" class="text-2xl hover:text-gray-400 leading-none">&times;</button></div><div class="mb-4 p-3 rounded-xl text-sm" style="background: var(--accent-light); color: var(--accent-dark)"><i class="fas fa-info-circle ml-1"></i> اكتب الأدوية المطلوبة وحدد مستوى الإلحاح، وسنتولى إرسالها للصيدليات. سيقوم أول صيدلية يتوفر فيها الدواء بالاتصال بك مباشرة!</div><form onsubmit="submitMedicineRequest(event)"><div class="mb-4"><label class="block text-sm font-semibold mb-2">الأدوية المطلوبة (نصياً)</label><textarea id="medList" class="ctrl-input" rows="3" placeholder="مثال: كونكور 5مغ، كاتافلام، شراب سيتامول" required></textarea></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4"><div><label class="block text-sm font-semibold mb-2">اسم المريض (اختياري)</label><input type="text" id="medName" class="ctrl-input" placeholder="اكتب اسمك"></div><div><label class="block text-sm font-semibold mb-2">رقم الهاتف للتواصل</label><input type="tel" id="medPhone" class="ctrl-input" placeholder="09XXXXXXXX" required></div></div><div class="mb-4"><label class="block text-sm font-semibold mb-2">مستوى الإلحاح</label><select id="medUrgency" class="ctrl-input"><option value="عاجل جداً (طوارئ)">عاجل جداً (طوارئ)</option><option value="عاجل (خلال اليوم)">عاجل (خلال اليوم)</option><option value="عادي" selected>عادي</option></select></div><div class="mb-6"><label class="block text-sm font-semibold mb-2">صورة الوصفة الطبية (اختياري)</label><div class="file-input-wrapper"><label class="file-input-label" for="medImage"><i class="fas fa-camera text-2xl mb-2"></i><span>اضغط لاختيار صورة الوصفة (إن وجدت)</span><img id="imagePreview" class="preview-image hidden" src="" alt="معاينة"></label><input type="file" id="medImage" accept="image/*" onchange="previewMedicineImage(event)"></div></div><button type="submit" id="medSubmitBtn" class="w-full py-3.5 rounded-xl text-white font-bold text-sm transition-all hover:opacity-90 flex items-center justify-center gap-2" style="background: var(--accent)"><i class="fas fa-paper-plane"></i> إرسال للصيدليات</button></form></div>`; 
+    document.getElementById('modalOverlay').classList.add('active'); 
+    lockScroll(); 
 }
-window.previewMedicineImage = (event) => { const file = event.target.files[0]; const reader = new FileReader(); reader.onload = (e) => { const img = document.getElementById('imagePreview'); img.src = e.target.result; img.classList.remove('hidden'); }; reader.readAsDataURL(file); }
+
+window.previewMedicineImage = (event) => { 
+    const file = event.target.files[0]; 
+    const reader = new FileReader(); 
+    reader.onload = (e) => { 
+        const img = document.getElementById('imagePreview'); 
+        img.src = e.target.result; 
+        img.classList.remove('hidden'); 
+    }; 
+    reader.readAsDataURL(file); 
+}
+
 window.submitMedicineRequest = async (e) => { 
     e.preventDefault(); 
     const medList = document.getElementById('medList').value.trim();
@@ -973,7 +1001,8 @@ window.submitMedicineRequest = async (e) => {
     const fileInput = document.getElementById('medImage'); 
     const file = fileInput.files[0]; 
     
-    if (!/^09\d{8}$/.test(phone)) { phoneInput.classList.add('input-invalid'); showToast('رقم هاتف غير صحيح'); return; } 
+    if (!medList) { showToast('الرجاء كتابة الأدوية المطلوبة'); return; }
+    if (!/^09\d{8}$/.test(phone)) { phoneInput.classList.add('input-invalid'); showToast('الرجاء إدخال رقم هاتف صحيح'); return; } 
     phoneInput.classList.remove('input-invalid'); 
     
     const submitBtn = document.getElementById('medSubmitBtn'); 
@@ -990,10 +1019,28 @@ window.submitMedicineRequest = async (e) => {
         }
         const medRef = `MED-${Math.floor(Math.random() * 900) + 100}`; 
         await supabase.from('medicine_requests').insert([{ 
-            med_ref: medRef, med_list: medList, urgency: urgency, patient_name: name, patient_phone: phone, 
-            image_url: imageUrl, status: 'searching', notes: '', available_pharmacy: ''
+            med_ref: medRef, 
+            med_list: medList,
+            urgency: urgency,
+            patient_name: name, 
+            patient_phone: phone, 
+            image_url: imageUrl, 
+            status: 'searching', 
+            notes: '', 
+            available_pharmacy: ''
         }]); 
-        document.getElementById('modalContent').innerHTML = `<div class="p-8 text-center"><div class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4" style="background: var(--accent-light)"><i class="fas fa-check text-4xl" style="color: var(--accent)"></i></div><h3 class="text-xl font-bold mb-2">تم إرسال طلبك بنجاح!</h3><p class="text-sm mb-2">رقم طلبك الدوائي هو:</p><div class="text-2xl font-black text-yellow-600 mb-4">#${medRef}</div><button onclick="copyText('${medRef}')" class="w-full py-3 rounded-xl text-white font-bold text-sm mb-2" style="background: var(--accent)"><i class="fas fa-copy ml-2"></i> نسخ الكود</button><button onclick="closeModal()" class="w-full py-2 rounded-xl border font-bold text-sm" style="border-color: var(--border)">حسناً</button></div>`; 
+        document.getElementById('modalContent').innerHTML = `
+        <div class="p-8 text-center">
+            <div class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4" style="background: var(--accent-light)"><i class="fas fa-check text-4xl" style="color: var(--accent)"></i></div>
+            <h3 class="text-xl font-bold mb-2" style="font-family: 'Noto Kufi Arabic'">تم إرسال طلبك بنجاح!</h3>
+            <p class="text-sm mb-2" style="color: var(--muted)">رقم طلبك الدوائي هو:</p>
+            <div class="text-2xl font-black text-yellow-600 mb-4">#${medRef}</div>
+            <p class="text-sm mb-6" style="color: var(--muted)">احفظ هذا الرقم للاستعلام عن حالة الدواء لاحقاً في خانة الاستعلام السريع أعلى الصفحة.</p>
+            <button onclick="copyText('${medRef}')" class="w-full py-3 rounded-xl text-white font-bold text-sm mb-2" style="background: var(--accent)">
+                <i class="fas fa-copy ml-2"></i> نسخ الكود
+            </button>
+            <button onclick="closeModal()" class="w-full py-2 rounded-xl border font-bold text-sm" style="border-color: var(--border)">حسناً</button>
+        </div>`; 
     } catch (err) { 
         showToast('حدث خطأ أثناء إرسال الطلب'); 
         submitBtn.disabled = false; 
@@ -1142,8 +1189,31 @@ window.openHealthFile = async () => {
         const { data: docSnap } = await supabase.from('health_files').select('*').eq('id', currentHealthFileId).single();
         if (docSnap) { renderHealthDashboard(docSnap); return; }
     }
-    openCtrlPanel('الملف الصحي الذكي', `<div class="flex flex-col gap-4 max-w-md mx-auto w-full"><div class="bg-pink-50 border border-pink-200 rounded-xl p-4 text-pink-800 text-sm">ملفك الطبي الخاص، محمي وكلمة مرور. يمكنك توليد رمز QR للطوارئ.</div><div class="flex gap-2 bg-gray-100 p-1 rounded-xl"><button onclick="switchHealthTab('login')" id="tabLoginBtn" class="flex-1 py-2 rounded-lg text-sm font-bold bg-white shadow">دخول</button><button onclick="switchHealthTab('register')" id="tabRegBtn" class="flex-1 py-2 rounded-lg text-sm font-bold text-gray-500">حساب جديد</button></div><form id="loginForm" onsubmit="handleHealthLogin(event)" class="flex flex-col gap-3"><input type="text" id="loginUsername" class="ctrl-input" placeholder="اسم المستخدم" required><input type="password" id="loginPassword" class="ctrl-input" placeholder="كلمة المرور" required><button type="submit" class="w-full py-3 rounded-xl text-white font-bold text-sm" style="background: #EC4899">دخول</button></form><form id="registerForm" onsubmit="handleHealthRegister(event)" class="hidden flex-col gap-3"><input type="text" id="regFullName" class="ctrl-input" placeholder="الاسم الكامل" required><input type="text" id="regUsername" class="ctrl-input" placeholder="اختر اسم مستخدم" required><input type="password" id="regPassword" class="ctrl-input" placeholder="اختر كلمة مرور" required><button type="submit" class="w-full py-3 rounded-xl text-white font-bold text-sm" style="background: #EC4899">إنشاء الملف</button></form></div>`, '#EC4899');
+    openCtrlPanel('الملف الصحي الذكي', `
+        <div class="flex flex-col gap-4 max-w-md mx-auto w-full">
+            <div class="bg-pink-50 border border-pink-200 rounded-xl p-4 text-pink-800 text-sm flex items-center gap-3">
+                <i class="fas fa-shield-heart text-xl"></i>
+                <span>ملفك الطبي الخاص، محمي بكلمة مرور. يمكنك توليد رمز QR ليقرأه الطبيب مباشرة دون كلمة مرور في حالات الطوارئ!</span>
+            </div>
+            <div class="flex gap-2 bg-gray-100 p-1 rounded-xl">
+                <button onclick="switchHealthTab('login')" id="tabLoginBtn" class="flex-1 py-2 rounded-lg text-sm font-bold bg-white shadow">تسجيل الدخول</button>
+                <button onclick="switchHealthTab('register')" id="tabRegBtn" class="flex-1 py-2 rounded-lg text-sm font-bold text-gray-500">حساب جديد</button>
+            </div>
+            <form id="loginForm" onsubmit="handleHealthLogin(event)" class="flex flex-col gap-3">
+                <input type="text" id="loginUsername" class="ctrl-input" placeholder="اسم المستخدم" required>
+                <input type="password" id="loginPassword" class="ctrl-input" placeholder="كلمة المرور" required>
+                <button type="submit" class="w-full py-3 rounded-xl text-white font-bold text-sm" style="background: #EC4899">دخول</button>
+            </form>
+            <form id="registerForm" onsubmit="handleHealthRegister(event)" class="hidden flex-col gap-3">
+                <input type="text" id="regFullName" class="ctrl-input" placeholder="الاسم الكامل" required>
+                <input type="text" id="regUsername" class="ctrl-input" placeholder="اختر اسم مستخدم" required>
+                <input type="password" id="regPassword" class="ctrl-input" placeholder="اختر كلمة مرور" required>
+                <button type="submit" class="w-full py-3 rounded-xl text-white font-bold text-sm" style="background: #EC4899">إنشاء الملف</button>
+            </form>
+        </div>
+    `, '#EC4899');
 }
+
 window.switchHealthTab = (tab) => {
     const loginForm = document.getElementById('loginForm'); const regForm = document.getElementById('registerForm'); const loginBtn = document.getElementById('tabLoginBtn'); const regBtn = document.getElementById('tabRegBtn');
     if (tab === 'login') { loginForm.classList.remove('hidden'); loginForm.classList.add('flex'); regForm.classList.add('hidden'); regForm.classList.remove('flex'); loginBtn.classList.add('bg-white', 'shadow'); loginBtn.classList.remove('text-gray-500'); regBtn.classList.remove('bg-white', 'shadow'); regBtn.classList.add('text-gray-500'); } 
