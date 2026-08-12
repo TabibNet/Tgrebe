@@ -494,11 +494,11 @@ window.closeCtrlPanel = (event) => {
     document.getElementById('ctrlOverlay').classList.remove('active'); 
     unlockScroll(); 
     if (unsubscribeMedRequests) { 
-        supabase.removeChannel(unsubscribeMedRequests); 
+        clearInterval(unsubscribeMedRequests); 
         unsubscribeMedRequests = null; 
     } 
     if (activeFollowupUnsub) { 
-        supabase.removeChannel(activeFollowupUnsub); 
+        clearInterval(activeFollowupUnsub); 
         activeFollowupUnsub = null; 
     } 
     currentFollowupBookingId = null;
@@ -625,10 +625,58 @@ window.handlePharmacyLogin = (e) => { e.preventDefault(); const name = document.
 window.renderPharmacyDashboard = (pharm) => { 
     openCtrlPanel(`لوحة تحكم: ${pharm.name}`, `<div class="flex flex-col gap-5"><div class="bg-white p-5 rounded-xl border flex items-center justify-between flex-col sm:flex-row gap-4" style="border-color: var(--border)"><div class="flex items-center gap-4"><img src="${pharm.image}" class="w-20 h-20 rounded-2xl object-cover"><div><h3 class="font-bold text-lg">${pharm.name}</h3><p class="text-sm" style="color: var(--pharmacy)">صيدلية</p></div></div><div class="bg-white p-3 rounded-xl border flex items-center justify-between gap-2 mb-3" style="border-color: var(--border);"><span class="text-sm font-bold text-gray-700">حالة العمل:</span><div class="flex gap-1 bg-gray-50 p-1 rounded-lg"><button onclick="setStatus('${pharm.id}', true)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${pharm.isopen === true ? 'bg-green-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">مفتوح</button><button onclick="setStatus('${pharm.id}', false)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${pharm.isopen === false ? 'bg-red-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">مغلق</button><button onclick="setStatus('${pharm.id}', null)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${pharm.isopen == null ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">لا شيء</button></div></div><button onclick="toggleNightShift('${pharm.id}', ${!pharm.night})" class="w-full px-4 py-2 rounded-xl font-bold text-sm ${pharm.night ? 'bg-yellow-500 text-white' : 'bg-gray-200'}">${pharm.night ? 'إيقاف المناوبة الليلية' : 'تفعيل المناوبة الليلية'}</button></div><div class="bg-white p-5 rounded-xl border" style="border-color: var(--border)"><h4 class="font-bold mb-4 text-sm">طلبات الأدوية الواردة</h4><div id="requestsContainer" class="flex flex-col gap-3"><p class="text-center py-10" style="color: var(--muted)">جاري تحميل الطلبات...</p></div></div></div>`, '#0E7C5F'); 
     
-    if (unsubscribeMedRequests) { clearInterval(unsubscribeMedRequests); }
+    // استخدام التحديث الدوري بدلاً من Realtime لضمان العمل دون أخطاء
+    if (unsubscribeMedRequests) { clearInterval(unsubscribeMedRequests); } 
     fetchMedRequests(pharm.name);
     unsubscribeMedRequests = setInterval(() => fetchMedRequests(pharm.name), 7000);
 }
+
+async function fetchMedRequests(pharmName) {
+    const container = document.getElementById('requestsContainer'); 
+    if (!container) return; 
+    
+    try {
+        const { data: snapshot, error } = await supabase.from('medicine_requests').select('*').in('status', ['active', 'searching', 'available', 'unavailable']); 
+        if (error) { 
+            container.innerHTML = '<p class="text-center py-10 text-red-500">حدث خطأ في قاعدة البيانات.</p>'; 
+            return; 
+        }
+        if (!snapshot || snapshot.length === 0) { 
+            container.innerHTML = '<p class="text-center py-10" style="color: var(--muted)">لا توجد طلبات أدوية حالياً.</p>'; 
+            return; 
+        } 
+        
+        let html = ''; 
+        snapshot.forEach(req => { 
+            const date = new Date(req.created_at).toLocaleString('ar-EG', { date: 'short', time: 'short' }); 
+            const phone = req.patient_phone; 
+            
+            let requestStatus = ''; 
+            if (req.status === 'available') requestStatus = `<span class="text-xs px-2 py-1 rounded bg-green-100 text-green-700 inline-block mb-2">تم التوفير</span>`; 
+            else if (req.status === 'unavailable') requestStatus = `<span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 inline-block mb-2">غير متوفر</span>`; 
+            else requestStatus = `<span class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-700 inline-block mb-2">قيد البحث</span>`;
+
+            let interactionArea = '';
+            if (req.status === 'available') {
+                if (req.available_pharmacy === pharmName) {
+                    interactionArea = `<div class="bg-green-50 text-green-700 text-sm font-bold p-3 rounded-lg text-center mb-2">أنت من وفر هذا الدواء للمريض</div><a href="tel:${phone}" class="flex-1 bg-blue-500 text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2"><i class="fas fa-phone"></i> اتصال بالمريض</a><button onclick="updateMedStatus('${req.id}', 'searching')" class="w-full mt-2 bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs">تراجع عن التوفير</button>`;
+                } else {
+                    interactionArea = `<div class="bg-gray-100 text-gray-500 text-sm font-bold p-3 rounded-lg text-center">تم إغلاق هذا الطلب (تم التوفير من صيدلية أخرى)</div>`;
+                }
+            } else if (req.status === 'unavailable') {
+                interactionArea = `<div class="bg-gray-100 text-gray-400 text-sm font-bold p-3 rounded-lg text-center">قمت بإغلاق هذا الطلب</div><button onclick="updateMedStatus('${req.id}', 'searching')" class="w-full mt-2 bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs">إعادة فتح الطلب</button>`;
+            } else {
+                interactionArea = `<input type="text" id="medNotes_${req.id}" placeholder="ملاحظة للمواطن" value="${req.notes || ''}" onblur="updateMedNotes('${req.id}', this.value)" class="ctrl-input text-sm py-1"><div class="flex gap-2 mt-2"><button onclick="setMedAvailable('${req.id}', '${pharmName}')" class="flex-1 bg-green-500 text-white px-3 py-2 rounded-lg text-sm font-semibold">توفّر الدواء</button><button onclick="updateMedStatus('${req.id}', 'unavailable')" class="flex-1 bg-gray-500 text-white px-3 py-2 rounded-lg text-sm font-semibold">غير متوفر</button></div><div class="flex gap-2 mt-2"><a href="tel:${phone}" class="flex-1 bg-blue-500 text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2"><i class="fas fa-phone"></i> اتصال</a></div>`;
+            }
+
+            html += `<div class="bg-white border rounded-xl p-4 flex flex-col gap-3" style="border-color: var(--border)"><div class="flex flex-col sm:flex-row gap-3 items-center">${req.image_url ? `<img src="${req.image_url}" class="w-full sm:w-24 h-24 object-cover rounded-lg cursor-zoom-in" onclick="openLightbox('${req.image_url}')">` : ''}<div class="flex-1 text-center sm:text-right"><h4 class="font-bold">${req.patient_name} <span class="text-xs text-yellow-600 font-mono">#${req.med_ref || ''}</span></h4><p class="text-sm text-gray-700 font-semibold">${req.med_list || ''}</p><p class="text-xs mt-1 text-red-500">الإلحاح: ${req.urgency || 'عادي'}</p><p class="text-xs" style="color: var(--muted)"><i class="fas fa-clock"></i> ${date}</p>${requestStatus}</div></div><div class="flex flex-col gap-2 mt-2 border-t pt-3" style="border-color: var(--border)">${interactionArea}</div></div>`; 
+        }); 
+        container.innerHTML = html; 
+        
+    } catch (err) {
+        console.error("Unexpected error in fetchMedRequests:", err);
+        container.innerHTML = `<p class="text-center py-10 text-red-500">حدث خطأ غير متوقع: ${err.message}</p>`;
+    }
 
 window.toggleNightShift = async (id, currentStatus) => { try { await supabase.from('listings').update({ night: currentStatus }).eq('id', id); showToast(currentStatus ? 'تم تفعيل المناوبة!' : 'تم إيقاف المناوبة.'); localStorage.setItem('force_listings_update', 'true'); } catch (e) { showToast('خطأ في التحديث'); } }
 window.setMedAvailable = async (id, pharmName) => { try { await supabase.from('medicine_requests').update({ status: 'available', notes: `الدواء متوفر لدى ${pharmName}. يرجى الحضور لاستلامه.`, available_pharmacy: pharmName }).eq('id', id); showToast('تم إعلام المريض بتوفر الدواء'); } catch (e) { showToast('خطأ في التحديث'); } }
