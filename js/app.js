@@ -746,19 +746,59 @@ window.fetchPatientHealthFile = async (userId, doctorData) => {
     } catch (e) { showToast("خطأ في قراءة الملف."); }
 }
 
+// === 2. Digital Prescription (الروشتة الإلكترونية) ===
 window.openPrescriptionModal = (patientId, patientName) => {
     closeModal(); 
-    document.getElementById('modalContent').innerHTML = `<div class="p-6"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-lg"><i class="fas fa-file-prescription ml-2" style="color: var(--doctor)"></i> إنشاء روشتة طبية</h3><button onclick="closeModal()" class="text-2xl">&times;</button></div><div class="bg-blue-50 p-3 rounded-xl mb-4 text-sm text-blue-800">المريض: <b>${patientName}</b></div><form onsubmit="generatePrescription(event, '${patientId}', '${patientName}')"><div id="medListContainer" class="flex flex-col gap-3 mb-4"><div class="bg-gray-50 p-3 rounded-xl border"><div class="grid grid-cols-1 sm:grid-cols-3 gap-2"><input type="text" required class="ctrl-input text-sm" placeholder="اسم الدواء" name="drugName[]"><input type="text" required class="ctrl-input text-sm" placeholder="الجرعة" name="dose[]"><input type="text" required class="ctrl-input text-sm" placeholder="التكرار" name="freq[]"></div></div></div><button type="button" onclick="addPrescriptionRow()" class="w-full py-2 mb-4 rounded-xl border-2 border-dashed text-sm font-semibold" style="border-color: var(--doctor); color: var(--doctor)"><i class="fas fa-plus"></i> إضافة دواء آخر</button><div class="mb-4"><label class="block text-sm font-semibold mb-2">ملاحظات الطبيب</label><textarea class="ctrl-input text-sm" rows="2" placeholder="مثال: يؤخذ بعد الأكل" name="rxNotes"></textarea></div><button type="submit" class="w-full py-3 rounded-xl text-white font-bold text-sm" style="background: var(--doctor)"><i class="fas fa-save"></i> حفظ الروشتة</button></form></div>`;
+    document.getElementById('modalContent').innerHTML = `
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-bold text-lg"><i class="fas fa-file-prescription ml-2" style="color: var(--doctor)"></i> إنشاء روشتة طبية</h3>
+                <button onclick="closeModal()" class="text-2xl hover:text-gray-400 leading-none">&times;</button>
+            </div>
+            <div class="bg-blue-50 p-3 rounded-xl mb-4 text-sm text-blue-800 flex items-center gap-2">
+                <i class="fas fa-user"></i> المريض: <b>${patientName}</b>
+            </div>
+            <form onsubmit="generatePrescription(event, '${patientId}', '${patientName}')">
+                <div id="medListContainer" class="flex flex-col gap-3 mb-4">
+                    <div class="bg-gray-50 p-3 rounded-xl border" style="border-color: var(--border)">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <input type="text" required class="ctrl-input text-sm" placeholder="اسم الدواء" name="drugName[]">
+                            <input type="text" required class="ctrl-input text-sm" placeholder="الجرعة (مثال: حبة)" name="dose[]">
+                            <input type="text" required class="ctrl-input text-sm" placeholder="التكرار (مثال: 3 مرات يومياً)" name="freq[]">
+                        </div>
+                    </div>
+                </div>
+                <button type="button" onclick="addPrescriptionRow()" class="w-full py-2 mb-4 rounded-xl border-2 border-dashed text-sm font-semibold" style="border-color: var(--doctor); color: var(--doctor)">
+                    <i class="fas fa-plus"></i> إضافة دواء آخر
+                </button>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold mb-2">ملاحظات الطبيب / التعليمات</label>
+                    <textarea class="ctrl-input text-sm" rows="2" placeholder="مثال: يؤخذ بعد الأكل، مراجعة بعد أسبوع..." name="rxNotes"></textarea>
+                </div>
+                <button type="submit" class="w-full py-3 rounded-xl text-white font-bold text-sm" style="background: var(--doctor)">
+                    <i class="fas fa-save"></i> حفظ الروشتة في ملف المريض
+                </button>
+            </form>
+        </div>`;
     document.getElementById('modalOverlay').classList.add('active');
     lockScroll();
 }
+
 window.addPrescriptionRow = () => {
     const container = document.getElementById('medListContainer');
     const newRow = document.createElement('div');
     newRow.className = 'bg-gray-50 p-3 rounded-xl border relative';
-    newRow.innerHTML = `<button type="button" onclick="this.parentElement.remove()" class="absolute top-2 left-2 text-red-500"><i class="fas fa-times-circle"></i></button><div class="grid grid-cols-1 sm:grid-cols-3 gap-2"><input type="text" required class="ctrl-input text-sm" placeholder="اسم الدواء" name="drugName[]"><input type="text" required class="ctrl-input text-sm" placeholder="الجرعة" name="dose[]"><input type="text" required class="ctrl-input text-sm" placeholder="التكرار" name="freq[]"></div>`;
+    newRow.style.borderColor = 'var(--border)';
+    newRow.innerHTML = `
+        <button type="button" onclick="this.parentElement.remove()" class="absolute top-2 left-2 text-red-500 hover:text-red-700"><i class="fas fa-times-circle"></i></button>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <input type="text" required class="ctrl-input text-sm" placeholder="اسم الدواء" name="drugName[]">
+            <input type="text" required class="ctrl-input text-sm" placeholder="الجرعة" name="dose[]">
+            <input type="text" required class="ctrl-input text-sm" placeholder="التكرار" name="freq[]">
+        </div>`;
     container.appendChild(newRow);
 }
+
 window.generatePrescription = async (e, patientId, patientName) => {
     e.preventDefault();
     const form = e.target;
@@ -766,12 +806,21 @@ window.generatePrescription = async (e, patientId, patientName) => {
     const doses = form.elements['dose[]'];
     const freqs = form.elements['freq[]'];
     const notes = form.elements['rxNotes'].value;
+
     let rxText = `📋 *روشتة طبية إلكترونية*\n_______________________\n`;
-    if (drugNames.length === undefined) { rxText += `\n💊 ${drugNames.value}\n   الجرعة: ${doses.value} | ${freqs.value}\n`; } 
-    else { for (let i = 0; i < drugNames.length; i++) { rxText += `\n${i + 1}. 💊 ${drugNames[i].value}\n   الجرعة: ${doses[i].value} | ${freqs[i].value}\n`; } }
+    
+    if (drugNames.length === undefined) {
+        rxText += `\n💊 ${drugNames.value}\n   الجرعة: ${doses.value} | ${freqs.value}\n`;
+    } else {
+        for (let i = 0; i < drugNames.length; i++) {
+            rxText += `\n${i + 1}. 💊 ${drugNames[i].value}\n   الجرعة: ${doses[i].value} | ${freqs[i].value}\n`;
+        }
+    }
     if (notes) rxText += `\n📝 *ملاحظات:* ${notes}\n`;
-    rxText += `_______________________\nيرجى الالتزام بالجرعات.`;
+    rxText += `_______________________\nيرجى الالتزام بالجرعات ولا تنسَ المراجعة.`;
+
     const doctorName = document.getElementById('ctrlTitle')?.textContent.replace('لوحة: ', '').trim() || 'طبيب';
+
     try {
         const { data: docSnap, error } = await supabase.from('health_files').select('prescriptions').eq('id', patientId).single();
         if (error) return;
@@ -783,8 +832,9 @@ window.generatePrescription = async (e, patientId, patientName) => {
         fetchPatientHealthFile(patientId, { specialty: 'general' }); 
     } catch (err) { showToast('خطأ في حفظ الروشتة'); }
 }
+
 window.deletePrescription = async (rxDate) => {
-    if (!confirm("هل أنت متأكد من حذف هذه الروشتة؟")) return;
+    if (!confirm("هل أنت متأكد من حذف هذه الروشتة نهائياً؟")) return;
     try {
         const { data: docSnap, error } = await supabase.from('health_files').select('*').eq('id', currentHealthFileId).single();
         if (error) return;
@@ -794,6 +844,7 @@ window.deletePrescription = async (rxDate) => {
         renderHealthDashboard({ ...docSnap, prescriptions: updatedRx });
     } catch (err) { showToast('حدث خطأ أثناء الحذف'); }
 };
+
 
 window.openMedicineDonation = () => {
     openCtrlPanel('صندوق الأدوية الفائضة', `<div class="flex flex-col gap-5"><div class="bg-red-50 border-2 border-red-400 rounded-xl p-4 text-red-800"><div class="font-black text-lg mb-2"><i class="fas fa-exclamation-triangle"></i> تنبيه أمان</div><ul class="list-disc pr-5 space-y-1 text-sm font-bold"><li>الموقع يعمل كوسيط خيري فقط.</li><li>يُمنع نشر الأدوية النفسية أو المخدرة.</li><li>تأكد من تاريخ الصلاحية قبل الاستخدام.</li></ul></div><div class="bg-white p-5 rounded-xl border"><h4 class="font-bold mb-4 text-sm"><i class="fas fa-hand-holding-medical text-green-600"></i> تبرع بدواء فائض</h4><form onsubmit="submitMedicineDonation(event)" class="grid grid-cols-1 sm:grid-cols-2 gap-3"><input type="text" id="medDonorName" class="ctrl-input text-sm" placeholder="اسم المتبرع" required><input type="text" id="medDonationName" class="ctrl-input text-sm" placeholder="اسم الدواء التجاري" required><select id="medDonationType" class="ctrl-input text-sm"><option>حبوب / أقراص</option><option>شراب</option><option>كريم / مرهم</option><option>قطرات</option></select><input type="text" id="medDonationExpiry" class="ctrl-input text-sm" placeholder="تاريخ الانتهاء (10/2025)" required><input type="text" id="medDonationQty" class="ctrl-input text-sm" placeholder="الكمية" required><input type="tel" id="medDonationPhone" class="ctrl-input text-sm" placeholder="رقم الهاتف 09XX" required><textarea id="medDonationNotes" class="ctrl-input text-sm col-span-1 sm:col-span-2" rows="2" placeholder="ملاحظات"></textarea><button type="submit" class="col-span-1 sm:col-span-2 py-3 rounded-xl text-white font-bold text-sm" style="background: #059669;">نشر الدواء</button></form></div><div class="bg-white p-5 rounded-xl border"><h4 class="font-bold mb-4 text-sm"><i class="fas fa-list-alt text-green-600"></i> الأدوية المتوفرة</h4><div id="medicineDonationsList" class="flex flex-col gap-3"><p class="text-center py-8 text-gray-400 text-sm">جاري تحميل الأدوية...</p></div></div></div>`, '#059669');
