@@ -1098,11 +1098,79 @@ window.handleHealthLogin = async (e) => {
     renderHealthDashboard(snap[0]);
 }
 window.renderHealthDashboard = (data) => {
-    openCtrlPanel(`الملف الصحي: ${data.full_name}`, `<div class="flex flex-col gap-5"><div class="bg-white p-6 rounded-2xl border-2 flex flex-col items-center" style="border-color: #EC4899;"><div class="text-sm font-bold text-pink-500 mb-3">رمز الطوارئ الطبي (QR)</div><div id="qrcode" class="bg-white p-3 rounded-xl border"></div></div><form onsubmit="saveHealthProfile(event)" class="bg-white p-5 rounded-xl border grid grid-cols-1 sm:grid-cols-2 gap-3"><div class="col-span-1 sm:col-span-2"><label class="text-xs font-bold text-gray-500">الاسم الكامل</label><input type="text" id="hfFullName" class="ctrl-input" value="${data.full_name || ''}" required></div><div><label class="text-xs font-bold text-gray-500">العمر</label><input type="number" id="hfAge" class="ctrl-input" value="${data.age || ''}"></div><div><label class="text-xs font-bold text-gray-500">الجنس</label><select id="hfGender" class="ctrl-input"><option value="ذكر" ${data.gender === 'ذكر' ? 'selected' : ''}>ذكر</option><option value="أنثى" ${data.gender === 'أنثى' ? 'selected' : ''}>أنثى</option></select></div><div><label class="text-xs font-bold text-gray-500">فصيلة الدم</label><select id="hfBloodType" class="ctrl-input">${["A+","A-","B+","B-","AB+","AB-","O+","O-","غير معروف"].map(t => `<option value="${t}" ${data.blood_type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div><div><label class="text-xs font-bold text-gray-500">الوزن (كغ)</label><input type="text" id="hfWeight" class="ctrl-input" value="${data.weight || ''}"></div><div class="col-span-1 sm:col-span-2"><label class="text-xs font-bold text-gray-500">الأمراض المزمنة</label><input type="text" id="hfDiseases" class="ctrl-input" value="${data.diseases || ''}"></div><div class="col-span-1 sm:col-span-2"><label class="text-xs font-bold text-gray-500">الحساسية</label><input type="text" id="hfAllergies" class="ctrl-input" value="${data.allergies || ''}"></div><div class="col-span-1 sm:col-span-2"><label class="text-xs font-bold text-gray-500">الأدوية الحالية</label><input type="text" id="hfMedications" class="ctrl-input" value="${data.medications || ''}"></div><div class="col-span-1 sm:col-span-2 p-3 rounded-xl border" style="border-color: #FED7AA; background: #FFF7ED;"><label class="text-xs font-bold text-orange-700">سجل الأسنان</label><textarea id="hfDental" class="ctrl-input mt-2" rows="2">${data.dental || ''}</textarea></div><div class="col-span-1 sm:col-span-2 p-3 rounded-xl border" style="border-color: #BFDBFE; background: #EFF6FF;"><label class="text-xs font-bold text-blue-700">سجل العيون</label><textarea id="hfEye" class="ctrl-input mt-2" rows="2">${data.eye || ''}</textarea></div><div><label class="text-xs font-bold text-gray-500">اسم جهة الطوارئ</label><input type="text" id="hfEmergencyName" class="ctrl-input" value="${data.emergency_name || ''}"></div><div><label class="text-xs font-bold text-gray-500">هاتف جهة الطوارئ</label><input type="tel" id="hfEmergencyPhone" class="ctrl-input" value="${data.emergency_phone || ''}"></div><button type="submit" class="col-span-1 sm:col-span-2 py-3 rounded-xl text-white font-bold text-sm" style="background: #EC4899">حفظ</button></form><div class="bg-white p-5 rounded-xl border"><h4 class="font-bold mb-4 text-sm">روشتي الطبية</h4><div class="flex flex-col gap-4 mt-2">${data.prescriptions && data.prescriptions.length > 0 ? data.prescriptions.slice().reverse().map(rx => `<div class="bg-gradient-to-br from-white to-blue-50/40 p-5 rounded-2xl border-2 border-dashed border-blue-300 relative"><button onclick="deletePrescription('${rx.date}')" class="absolute top-3 left-3 w-8 h-8 rounded-full bg-red-50 text-red-500"><i class="fas fa-trash-alt text-xs"></i></button><div class="flex justify-between items-center mb-4 pb-3 border-b border-blue-200"><div><div class="font-bold text-blue-800 text-sm">د. ${rx.doctor || 'طبيب'}</div><div class="text-[10px] text-gray-500">${new Date(rx.date).toLocaleDateString('ar-EG')}</div></div><i class="fas fa-prescription-bottle-medical text-2xl text-blue-200"></i></div><div class="whitespace-pre-line font-sans text-gray-800 text-sm leading-loose">${rx.text}</div></div>`).join('') : '<div class="text-center py-8 text-gray-400 text-sm">لا توجد روشتات.</div>'}</div></div></div>`, '#EC4899');
+    openCtrlPanel(`الملف الصحي: ${data.full_name || data.fullName}`, `
+        <div class="flex flex-col gap-5">
+            <div class="bg-white p-6 rounded-2xl border-2 flex flex-col items-center" style="border-color: #EC4899;">
+                <div class="text-sm font-bold text-pink-500 mb-3">رمز الطوارئ الطبي (QR)</div>
+                <div id="qrcode" class="bg-white p-3 rounded-xl border" style="border-color: var(--border)"></div>
+                <p class="text-xs text-gray-500 mt-3 text-center">وجه الطبيب لمسح هذا الرمز للوصول لملفك فوراً دون كلمة مرور</p>
+            </div>
+            <form onsubmit="saveHealthProfile(event)" class="bg-white p-5 rounded-xl border grid grid-cols-1 sm:grid-cols-2 gap-3" style="border-color: var(--border)">
+                <div class="col-span-1 sm:col-span-2"><label class="text-xs font-bold text-gray-500">الاسم الكامل</label><input type="text" id="hfFullName" class="ctrl-input" value="${data.full_name || data.fullName || ''}" required></div>
+                <div><label class="text-xs font-bold text-gray-500">العمر</label><input type="number" id="hfAge" class="ctrl-input" value="${data.age || ''}"></div>
+                <div><label class="text-xs font-bold text-gray-500">الجنس</label><select id="hfGender" class="ctrl-input"><option value="ذكر" ${data.gender === 'ذكر' ? 'selected' : ''}>ذكر</option><option value="أنثى" ${data.gender === 'أنثى' ? 'selected' : ''}>أنثى</option></select></div>
+                <div><label class="text-xs font-bold text-gray-500">فصيلة الدم</label><select id="hfBloodType" class="ctrl-input">${["A+","A-","B+","B-","AB+","AB-","O+","O-","غير معروف"].map(t => `<option value="${t}" ${data.blood_type === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+                <div><label class="text-xs font-bold text-gray-500">الوزن (كغ)</label><input type="text" id="hfWeight" class="ctrl-input" value="${data.weight || ''}"></div>
+                <div class="col-span-1 sm:col-span-2"><label class="text-xs font-bold text-gray-500">الأمراض المزمنة</label><input type="text" id="hfDiseases" class="ctrl-input" value="${data.diseases || ''}" placeholder="مثال: سكري، ضغط"></div>
+                <div class="col-span-1 sm:col-span-2"><label class="text-xs font-bold text-gray-500">الحساسية (دوائية/غذائية)</label><input type="text" id="hfAllergies" class="ctrl-input" value="${data.allergies || ''}" placeholder="مثال: بنسلين، مكسرات"></div>
+                <div class="col-span-1 sm:col-span-2"><label class="text-xs font-bold text-gray-500">الأدوية الحالية</label><input type="text" id="hfMedications" class="ctrl-input" value="${data.medications || ''}"></div>
+                
+                <!-- سجل الأسنان -->
+                <div class="col-span-1 sm:col-span-2 mt-2 p-3 rounded-xl border" style="border-color: #FED7AA; background: #FFF7ED;">
+                    <label class="text-xs font-bold text-orange-700 flex items-center gap-1"><i class="fas fa-tooth"></i> سجل الأسنان (يُقرأ فقط من قبل طبيب الأسنان)</label>
+                    <textarea id="hfDental" class="ctrl-input mt-2" rows="2" placeholder="عمليات سابقة، تقويم، حساسية معينة...">${data.dental || ''}</textarea>
+                </div>
+
+                <!-- سجل العيون -->
+                <div class="col-span-1 sm:col-span-2 p-3 rounded-xl border" style="border-color: #BFDBFE; background: #EFF6FF;">
+                    <label class="text-xs font-bold text-blue-700 flex items-center gap-1"><i class="fas fa-eye"></i> سجل العيون (يُقرأ فقط من قبل طبيب العيون)</label>
+                    <textarea id="hfEye" class="ctrl-input mt-2" rows="2" placeholder="وصفة النظارة، ضغط العين، عمليات ليزك...">${data.eye || ''}</textarea>
+                </div>
+
+                <div><label class="text-xs font-bold text-gray-500">اسم جهة الطوارئ</label><input type="text" id="hfEmergencyName" class="ctrl-input" value="${data.emergency_name || ''}"></div>
+                <div><label class="text-xs font-bold text-gray-500">هاتف جهة الطوارئ</label><input type="tel" id="hfEmergencyPhone" class="ctrl-input" value="${data.emergency_phone || ''}"></div>
+                <button type="submit" class="col-span-1 sm:col-span-2 py-3 rounded-xl text-white font-bold text-sm" style="background: #EC4899"><i class="fas fa-save ml-2"></i> حفظ التحديثات</button>
+            </form>
+            <div class="bg-white p-5 rounded-xl border" style="border-color: var(--border)">
+                <h4 class="font-bold mb-4 text-sm flex items-center gap-2"><i class="fas fa-file-medical text-blue-600"></i> روشتي الطبية السابقة</h4>
+                <div class="flex flex-col gap-4 mt-2">
+                    ${data.prescriptions && data.prescriptions.length > 0 ? 
+                        data.prescriptions.slice().reverse().map(rx => `
+                            <div class="bg-gradient-to-br from-white to-blue-50/40 p-5 rounded-2xl border-2 border-dashed border-blue-300 relative shadow-sm">
+                                <button onclick="deletePrescription('${rx.date}')" class="absolute top-3 left-3 w-8 h-8 rounded-full bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center shadow-sm" title="حذف الروشتة">
+                                    <i class="fas fa-trash-alt text-xs"></i>
+                                </button>
+                                <div class="flex justify-between items-center mb-4 pb-3 border-b border-blue-200">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><i class="fas fa-user-md"></i></div>
+                                        <div>
+                                            <div class="font-bold text-blue-800 text-sm">د. ${rx.doctor || 'طبيب'}</div>
+                                            <div class="text-[10px] text-gray-500">${new Date(rx.date).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                                        </div>
+                                    </div>
+                                    <i class="fas fa-prescription-bottle-medical text-2xl text-blue-200"></i>
+                                </div>
+                                <div class="whitespace-pre-line font-sans text-gray-800 text-sm leading-loose" style="white-space: pre-wrap;">${rx.text}</div>
+                                <div class="mt-4 pt-3 border-t border-dashed border-blue-200 flex justify-end items-center gap-2">
+                                    <span class="text-[10px] text-gray-400 italic">توقيع الطبيب الإلكتروني</span>
+                                    <i class="fas fa-signature text-blue-400"></i>
+                                </div>
+                            </div>
+                        `).join('') 
+                        : '<div class="text-center py-8 text-gray-400 text-sm flex flex-col items-center gap-2"><i class="fas fa-file-prescription text-4xl text-gray-200 mb-2"></i>لا توجد روشتات طبية محفوظة حالياً.</div>'}
+                </div>
+            </div>
+            <!-- زر تسجيل الخروج -->
+            <button onclick="logoutHealthFile()" class="w-full py-3 rounded-xl border font-bold text-sm mt-4" style="border-color: #EC4899; color: #EC4899;">
+                <i class="fas fa-sign-out-alt ml-2"></i> تسجيل الخروج من الملف الصحي
+            </button>
+        </div>
+    `, '#EC4899');
     const qrContainer = document.getElementById('qrcode');
     qrContainer.innerHTML = '';
     new QRCode(qrContainer, { text: currentHealthFileId, width: 180, height: 180, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.H });
 }
+
 window.saveHealthProfile = async (e) => {
     e.preventDefault();
     const data = {
