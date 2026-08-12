@@ -625,8 +625,7 @@ window.handlePharmacyLogin = (e) => { e.preventDefault(); const name = document.
 window.renderPharmacyDashboard = (pharm) => { 
     openCtrlPanel(`لوحة تحكم: ${pharm.name}`, `<div class="flex flex-col gap-5"><div class="bg-white p-5 rounded-xl border flex items-center justify-between flex-col sm:flex-row gap-4" style="border-color: var(--border)"><div class="flex items-center gap-4"><img src="${pharm.image}" class="w-20 h-20 rounded-2xl object-cover"><div><h3 class="font-bold text-lg">${pharm.name}</h3><p class="text-sm" style="color: var(--pharmacy)">صيدلية</p></div></div><div class="bg-white p-3 rounded-xl border flex items-center justify-between gap-2 mb-3" style="border-color: var(--border);"><span class="text-sm font-bold text-gray-700">حالة العمل:</span><div class="flex gap-1 bg-gray-50 p-1 rounded-lg"><button onclick="setStatus('${pharm.id}', true)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${pharm.isopen === true ? 'bg-green-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">مفتوح</button><button onclick="setStatus('${pharm.id}', false)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${pharm.isopen === false ? 'bg-red-500 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">مغلق</button><button onclick="setStatus('${pharm.id}', null)" class="px-4 py-1.5 rounded-md text-xs font-bold transition-all ${pharm.isopen == null ? 'bg-gray-700 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}">لا شيء</button></div></div><button onclick="toggleNightShift('${pharm.id}', ${!pharm.night})" class="w-full px-4 py-2 rounded-xl font-bold text-sm ${pharm.night ? 'bg-yellow-500 text-white' : 'bg-gray-200'}">${pharm.night ? 'إيقاف المناوبة الليلية' : 'تفعيل المناوبة الليلية'}</button></div><div class="bg-white p-5 rounded-xl border" style="border-color: var(--border)"><h4 class="font-bold mb-4 text-sm">طلبات الأدوية الواردة</h4><div id="requestsContainer" class="flex flex-col gap-3"><p class="text-center py-10" style="color: var(--muted)">جاري تحميل الطلبات...</p></div></div></div>`, '#0E7C5F'); 
     
-    // استخدام التحديث الدوري بدلاً من Realtime لضمان العمل دون أخطاء
-    if (unsubscribeMedRequests) { clearInterval(unsubscribeMedRequests); } 
+    if (unsubscribeMedRequests) clearInterval(unsubscribeMedRequests); 
     fetchMedRequests(pharm.name);
     unsubscribeMedRequests = setInterval(() => fetchMedRequests(pharm.name), 7000);
 }
@@ -634,49 +633,39 @@ window.renderPharmacyDashboard = (pharm) => {
 async function fetchMedRequests(pharmName) {
     const container = document.getElementById('requestsContainer'); 
     if (!container) return; 
+    container.innerHTML = '<p class="text-center py-10" style="color: var(--muted)">جاري تحديث الطلبات...</p>';
     
-    try {
-        const { data: snapshot, error } = await supabase.from('medicine_requests').select('*').in('status', ['active', 'searching', 'available', 'unavailable']); 
-        if (error) { 
-            container.innerHTML = '<p class="text-center py-10 text-red-500">حدث خطأ في قاعدة البيانات.</p>'; 
-            return; 
-        }
-        if (!snapshot || snapshot.length === 0) { 
-            container.innerHTML = '<p class="text-center py-10" style="color: var(--muted)">لا توجد طلبات أدوية حالياً.</p>'; 
-            return; 
-        } 
+    const { data: snapshot, error } = await supabase.from('medicine_requests').select('*').in('status', ['active', 'searching', 'available', 'unavailable']); 
+    if (error) { container.innerHTML = '<p class="text-center py-10 text-red-500">حدث خطأ.</p>'; return; }
+    if (snapshot.length === 0) { container.innerHTML = '<p class="text-center py-10" style="color: var(--muted)">لا توجد طلبات أدوية حالياً.</p>'; return; } 
+    
+    let html = ''; 
+    snapshot.forEach(req => { 
+        const date = new Date(req.created_at).toLocaleString('ar-EG', { date: 'short', time: 'short' }); 
+        const phone = req.patient_phone; 
         
-        let html = ''; 
-        snapshot.forEach(req => { 
-            const date = new Date(req.created_at).toLocaleString('ar-EG', { date: 'short', time: 'short' }); 
-            const phone = req.patient_phone; 
-            
-            let requestStatus = ''; 
-            if (req.status === 'available') requestStatus = `<span class="text-xs px-2 py-1 rounded bg-green-100 text-green-700 inline-block mb-2">تم التوفير</span>`; 
-            else if (req.status === 'unavailable') requestStatus = `<span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 inline-block mb-2">غير متوفر</span>`; 
-            else requestStatus = `<span class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-700 inline-block mb-2">قيد البحث</span>`;
+        let requestStatus = ''; 
+        if (req.status === 'available') requestStatus = `<span class="text-xs px-2 py-1 rounded bg-green-100 text-green-700 inline-block mb-2">تم التوفير</span>`; 
+        else if (req.status === 'unavailable') requestStatus = `<span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700 inline-block mb-2">غير متوفر</span>`; 
+        else requestStatus = `<span class="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-700 inline-block mb-2">قيد البحث</span>`;
 
-            let interactionArea = '';
-            if (req.status === 'available') {
-                if (req.available_pharmacy === pharmName) {
-                    interactionArea = `<div class="bg-green-50 text-green-700 text-sm font-bold p-3 rounded-lg text-center mb-2">أنت من وفر هذا الدواء للمريض</div><a href="tel:${phone}" class="flex-1 bg-blue-500 text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2"><i class="fas fa-phone"></i> اتصال بالمريض</a><button onclick="updateMedStatus('${req.id}', 'searching')" class="w-full mt-2 bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs">تراجع عن التوفير</button>`;
-                } else {
-                    interactionArea = `<div class="bg-gray-100 text-gray-500 text-sm font-bold p-3 rounded-lg text-center">تم إغلاق هذا الطلب (تم التوفير من صيدلية أخرى)</div>`;
-                }
-            } else if (req.status === 'unavailable') {
-                interactionArea = `<div class="bg-gray-100 text-gray-400 text-sm font-bold p-3 rounded-lg text-center">قمت بإغلاق هذا الطلب</div><button onclick="updateMedStatus('${req.id}', 'searching')" class="w-full mt-2 bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs">إعادة فتح الطلب</button>`;
+        let interactionArea = '';
+        if (req.status === 'available') {
+            if (req.available_pharmacy === pharmName) {
+                interactionArea = `<div class="bg-green-50 text-green-700 text-sm font-bold p-3 rounded-lg text-center mb-2">أنت من وفر هذا الدواء للمريض</div><a href="tel:${phone}" class="flex-1 bg-blue-500 text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2"><i class="fas fa-phone"></i> اتصال للمريض</a><button onclick="updateMedStatus('${req.id}', 'searching')" class="w-full mt-2 bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs">تراجع عن التوفير</button>`;
             } else {
-                interactionArea = `<input type="text" id="medNotes_${req.id}" placeholder="ملاحظة للمواطن" value="${req.notes || ''}" onblur="updateMedNotes('${req.id}', this.value)" class="ctrl-input text-sm py-1"><div class="flex gap-2 mt-2"><button onclick="setMedAvailable('${req.id}', '${pharmName}')" class="flex-1 bg-green-500 text-white px-3 py-2 rounded-lg text-sm font-semibold">توفّر الدواء</button><button onclick="updateMedStatus('${req.id}', 'unavailable')" class="flex-1 bg-gray-500 text-white px-3 py-2 rounded-lg text-sm font-semibold">غير متوفر</button></div><div class="flex gap-2 mt-2"><a href="tel:${phone}" class="flex-1 bg-blue-500 text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2"><i class="fas fa-phone"></i> اتصال</a></div>`;
+                interactionArea = `<div class="bg-gray-100 text-gray-500 text-sm font-bold p-3 rounded-lg text-center">تم إغلاق هذا الطلب (تم التوفير من صيدلية أخرى)</div>`;
             }
+        } else if (req.status === 'unavailable') {
+            interactionArea = `<div class="bg-gray-100 text-gray-400 text-sm font-bold p-3 rounded-lg text-center">قمت بإغلاق هذا الطلب</div><button onclick="updateMedStatus('${req.id}', 'searching')" class="w-full mt-2 bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-xs">إعادة فتح الطلب</button>`;
+        } else {
+            interactionArea = `<input type="text" id="medNotes_${req.id}" placeholder="ملاحظة للمواطن" value="${req.notes || ''}" onblur="updateMedNotes('${req.id}', this.value)" class="ctrl-input text-sm py-1"><div class="flex gap-2 mt-2"><button onclick="setMedAvailable('${req.id}', '${pharmName}')" class="flex-1 bg-green-500 text-white px-3 py-2 rounded-lg text-sm font-semibold">توفّر الدواء</button><button onclick="updateMedStatus('${req.id}', 'unavailable')" class="flex-1 bg-gray-500 text-white px-3 py-2 rounded-lg text-sm font-semibold">غير متوفر</button></div><div class="flex gap-2 mt-2"><a href="tel:${phone}" class="flex-1 bg-blue-500 text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center justify-center gap-2"><i class="fas fa-phone"></i> اتصال</a></div>`;
+        }
 
-            html += `<div class="bg-white border rounded-xl p-4 flex flex-col gap-3" style="border-color: var(--border)"><div class="flex flex-col sm:flex-row gap-3 items-center">${req.image_url ? `<img src="${req.image_url}" class="w-full sm:w-24 h-24 object-cover rounded-lg cursor-zoom-in" onclick="openLightbox('${req.image_url}')">` : ''}<div class="flex-1 text-center sm:text-right"><h4 class="font-bold">${req.patient_name} <span class="text-xs text-yellow-600 font-mono">#${req.med_ref || ''}</span></h4><p class="text-sm text-gray-700 font-semibold">${req.med_list || ''}</p><p class="text-xs mt-1 text-red-500">الإلحاح: ${req.urgency || 'عادي'}</p><p class="text-xs" style="color: var(--muted)"><i class="fas fa-clock"></i> ${date}</p>${requestStatus}</div></div><div class="flex flex-col gap-2 mt-2 border-t pt-3" style="border-color: var(--border)">${interactionArea}</div></div>`; 
-        }); 
-        container.innerHTML = html; 
-        
-    } catch (err) {
-        console.error("Unexpected error in fetchMedRequests:", err);
-        container.innerHTML = `<p class="text-center py-10 text-red-500">حدث خطأ غير متوقع: ${err.message}</p>`;
-    }
+        html += `<div class="bg-white border rounded-xl p-4 flex flex-col gap-3" style="border-color: var(--border)"><div class="flex flex-col sm:flex-row gap-3 items-center">${req.image_url ? `<img src="${req.image_url}" class="w-full sm:w-24 h-24 object-cover rounded-lg cursor-zoom-in" onclick="openLightbox('${req.image_url}')">` : ''}<div class="flex-1 text-center sm:text-right"><h4 class="font-bold">${req.patient_name} <span class="text-xs text-yellow-600 font-mono">#${req.med_ref || ''}</span></h4><p class="text-sm text-gray-700 font-semibold">${req.med_list || ''}</p><p class="text-xs mt-1 text-red-500">الإلحاح: ${req.urgency || 'عادي'}</p><p class="text-xs" style="color: var(--muted)"><i class="fas fa-clock"></i> ${date}</p>${requestStatus}</div></div><div class="flex flex-col gap-2 mt-2 border-t pt-3" style="border-color: var(--border)">${interactionArea}</div></div>`; 
+    }); 
+    container.innerHTML = html; 
+}
 
 window.toggleNightShift = async (id, currentStatus) => { try { await supabase.from('listings').update({ night: currentStatus }).eq('id', id); showToast(currentStatus ? 'تم تفعيل المناوبة!' : 'تم إيقاف المناوبة.'); localStorage.setItem('force_listings_update', 'true'); } catch (e) { showToast('خطأ في التحديث'); } }
 window.setMedAvailable = async (id, pharmName) => { try { await supabase.from('medicine_requests').update({ status: 'available', notes: `الدواء متوفر لدى ${pharmName}. يرجى الحضور لاستلامه.`, available_pharmacy: pharmName }).eq('id', id); showToast('تم إعلام المريض بتوفر الدواء'); } catch (e) { showToast('خطأ في التحديث'); } }
@@ -757,57 +746,25 @@ window.fetchPatientHealthFile = async (userId, doctorData) => {
             }
         }
 
-        // تمرير بيانات الطبيب الكاملة للروشتة
-        const docInfo = {
-            name: doctorData?.name || 'طبيب',
-            specialty: doctorData?.specialty || 'طبيب عام',
-            id: doctorData?.id || 'unknown'
-        };
-
-        document.getElementById('modalContent').innerHTML = `<div class="p-6"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-lg"><i class="fas fa-file-medical ml-2" style="color: var(--doctor)"></i> الملف الصحي للمريض</h3><button onclick="closeModal()" class="text-2xl">&times;</button><button onclick='openPrescriptionModal("${userId}", "${p.full_name}", ${JSON.stringify(docInfo)})' class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg"><i class="fas fa-file-prescription"></i> إنشاء روشتة</button></div><div class="flex flex-col gap-3"><div class="flex items-center gap-4 p-3 rounded-xl" style="background: #DBEAFE"><i class="fas fa-user-circle text-3xl" style="color: var(--doctor)"></i><div><h4 class="font-bold text-lg">${p.full_name}</h4><p class="text-sm text-gray-600">${p.age || '-'} سنة | ${p.gender || '-'}</p></div></div><div class="grid grid-cols-2 gap-3 text-sm"><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500">فصيلة الدم</div><div class="font-bold text-red-600">${p.blood_type || 'غير محدد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500">الوزن</div><div class="font-bold">${p.weight || '-'} كغ</div></div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الأمراض المزمنة</div><div class="font-semibold">${p.diseases || 'لا يوجد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الحساسية</div><div class="font-semibold text-red-600">${p.allergies || 'لا يوجد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الأدوية الحالية</div><div class="font-semibold">${p.medications || 'لا يوجد'}</div></div>${specializedRecordHtml}<div class="p-3 rounded-xl bg-green-50 border border-green-200"><div class="text-xs text-green-700 mb-1">جهة طوارئ</div><div class="font-semibold">${p.emergency_name || ''} - <span dir="ltr">${p.emergency_phone || ''}</span></div></div></div></div>`;
+        document.getElementById('modalContent').innerHTML = `<div class="p-6"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-lg"><i class="fas fa-file-medical ml-2" style="color: var(--doctor)"></i> الملف الصحي للمريض</h3><button onclick="closeModal()" class="text-2xl">&times;</button><button onclick="openPrescriptionModal('${userId}', '${p.full_name}')" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg"><i class="fas fa-file-prescription"></i> إنشاء روشتة</button></div><div class="flex flex-col gap-3"><div class="flex items-center gap-4 p-3 rounded-xl" style="background: #DBEAFE"><i class="fas fa-user-circle text-3xl" style="color: var(--doctor)"></i><div><h4 class="font-bold text-lg">${p.full_name}</h4><p class="text-sm text-gray-600">${p.age || '-'} سنة | ${p.gender || '-'}</p></div></div><div class="grid grid-cols-2 gap-3 text-sm"><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500">فصيلة الدم</div><div class="font-bold text-red-600">${p.blood_type || 'غير محدد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500">الوزن</div><div class="font-bold">${p.weight || '-'} كغ</div></div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الأمراض المزمنة</div><div class="font-semibold">${p.diseases || 'لا يوجد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الحساسية</div><div class="font-semibold text-red-600">${p.allergies || 'لا يوجد'}</div></div><div class="p-3 rounded-xl border"><div class="text-xs text-gray-500 mb-1">الأدوية الحالية</div><div class="font-semibold">${p.medications || 'لا يوجد'}</div></div>${specializedRecordHtml}<div class="p-3 rounded-xl bg-green-50 border border-green-200"><div class="text-xs text-green-700 mb-1">جهة طوارئ</div><div class="font-semibold">${p.emergency_name || ''} - <span dir="ltr">${p.emergency_phone || ''}</span></div></div></div></div>`;
         document.getElementById('modalOverlay').classList.add('active');
         lockScroll();
     } catch (e) { showToast("خطأ في قراءة الملف."); }
 }
 
-window.openPrescriptionModal = (patientId, patientName, doctorInfo) => {
-    window.currentDoctorInfo = doctorInfo; // حفظ بيانات الطبيب للختم
+window.openPrescriptionModal = (patientId, patientName) => {
     closeModal(); 
-    document.getElementById('modalContent').innerHTML = `
-        <div class="p-6">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="font-bold text-lg"><i class="fas fa-file-prescription ml-2" style="color: var(--doctor)"></i> إنشاء روشتة طبية</h3>
-                <button onclick="closeModal()" class="text-2xl hover:text-gray-400 leading-none">&times;</button>
-            </div>
-            <div class="bg-blue-50 p-3 rounded-xl mb-4 text-sm text-blue-800 flex items-center gap-2">
-                <i class="fas fa-user"></i> المريض: <b>${patientName}</b>
-            </div>
-            <form onsubmit="generatePrescription(event, '${patientId}', '${patientName}')">
-                <div id="medListContainer" class="flex flex-col gap-3 mb-4">
-                    <div class="bg-gray-50 p-3 rounded-xl border" style="border-color: var(--border)">
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <input type="text" required class="ctrl-input text-sm" placeholder="اسم الدواء" name="drugName[]">
-                            <input type="text" required class="ctrl-input text-sm" placeholder="الجرعة (مثال: حبة)" name="dose[]">
-                            <input type="text" required class="ctrl-input text-sm" placeholder="التكرار (مثال: 3 مرات يومياً)" name="freq[]">
-                        </div>
-                    </div>
-                </div>
-                <button type="button" onclick="addPrescriptionRow()" class="w-full py-2 mb-4 rounded-xl border-2 border-dashed text-sm font-semibold" style="border-color: var(--doctor); color: var(--doctor)">
-                    <i class="fas fa-plus"></i> إضافة دواء آخر
-                </button>
-                <div class="mb-4">
-                    <label class="block text-sm font-semibold mb-2">ملاحظات الطبيب / التعليمات</label>
-                    <textarea class="ctrl-input text-sm" rows="2" placeholder="مثال: يؤخذ بعد الأكل، مراجعة بعد أسبوع..." name="rxNotes"></textarea>
-                </div>
-                <button type="submit" class="w-full py-3 rounded-xl text-white font-bold text-sm" style="background: var(--doctor)">
-                    <i class="fas fa-save"></i> حفظ الروشتة في ملف المريض
-                </button>
-            </form>
-        </div>`;
+    document.getElementById('modalContent').innerHTML = `<div class="p-6"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-lg"><i class="fas fa-file-prescription ml-2" style="color: var(--doctor)"></i> إنشاء روشتة طبية</h3><button onclick="closeModal()" class="text-2xl">&times;</button></div><div class="bg-blue-50 p-3 rounded-xl mb-4 text-sm text-blue-800">المريض: <b>${patientName}</b></div><form onsubmit="generatePrescription(event, '${patientId}', '${patientName}')"><div id="medListContainer" class="flex flex-col gap-3 mb-4"><div class="bg-gray-50 p-3 rounded-xl border"><div class="grid grid-cols-1 sm:grid-cols-3 gap-2"><input type="text" required class="ctrl-input text-sm" placeholder="اسم الدواء" name="drugName[]"><input type="text" required class="ctrl-input text-sm" placeholder="الجرعة" name="dose[]"><input type="text" required class="ctrl-input text-sm" placeholder="التكرار" name="freq[]"></div></div></div><button type="button" onclick="addPrescriptionRow()" class="w-full py-2 mb-4 rounded-xl border-2 border-dashed text-sm font-semibold" style="border-color: var(--doctor); color: var(--doctor)"><i class="fas fa-plus"></i> إضافة دواء آخر</button><div class="mb-4"><label class="block text-sm font-semibold mb-2">ملاحظات الطبيب</label><textarea class="ctrl-input text-sm" rows="2" placeholder="مثال: يؤخذ بعد الأكل" name="rxNotes"></textarea></div><button type="submit" class="w-full py-3 rounded-xl text-white font-bold text-sm" style="background: var(--doctor)"><i class="fas fa-save"></i> حفظ الروشتة</button></form></div>`;
     document.getElementById('modalOverlay').classList.add('active');
     lockScroll();
 }
-
+window.addPrescriptionRow = () => {
+    const container = document.getElementById('medListContainer');
+    const newRow = document.createElement('div');
+    newRow.className = 'bg-gray-50 p-3 rounded-xl border relative';
+    newRow.innerHTML = `<button type="button" onclick="this.parentElement.remove()" class="absolute top-2 left-2 text-red-500"><i class="fas fa-times-circle"></i></button><div class="grid grid-cols-1 sm:grid-cols-3 gap-2"><input type="text" required class="ctrl-input text-sm" placeholder="اسم الدواء" name="drugName[]"><input type="text" required class="ctrl-input text-sm" placeholder="الجرعة" name="dose[]"><input type="text" required class="ctrl-input text-sm" placeholder="التكرار" name="freq[]"></div>`;
+    container.appendChild(newRow);
+}
 window.generatePrescription = async (e, patientId, patientName) => {
     e.preventDefault();
     const form = e.target;
@@ -815,67 +772,25 @@ window.generatePrescription = async (e, patientId, patientName) => {
     const doses = form.elements['dose[]'];
     const freqs = form.elements['freq[]'];
     const notes = form.elements['rxNotes'].value;
-
     let rxText = `📋 *روشتة طبية إلكترونية*\n_______________________\n`;
-    
-    if (drugNames.length === undefined) {
-        rxText += `\n💊 ${drugNames.value}\n   الجرعة: ${doses.value} | ${freqs.value}\n`;
-    } else {
-        for (let i = 0; i < drugNames.length; i++) {
-            rxText += `\n${i + 1}. 💊 ${drugNames[i].value}\n   الجرعة: ${doses[i].value} | ${freqs[i].value}\n`;
-        }
-    }
+    if (drugNames.length === undefined) { rxText += `\n💊 ${drugNames.value}\n   الجرعة: ${doses.value} | ${freqs.value}\n`; } 
+    else { for (let i = 0; i < drugNames.length; i++) { rxText += `\n${i + 1}. 💊 ${drugNames[i].value}\n   الجرعة: ${doses[i].value} | ${freqs[i].value}\n`; } }
     if (notes) rxText += `\n📝 *ملاحظات:* ${notes}\n`;
-    rxText += `_______________________\nيرجى الالتزام بالجرعات ولا تنسَ المراجعة.`;
-
-    const docInfo = window.currentDoctorInfo || { name: 'طبيب', specialty: 'طبيب عام', id: 'unknown' };
-    const date = new Date();
-    
-    // توليد رمز تحقق أمني فريد لكل روشتة
-    const verCode = btoa(`${docInfo.id}-${date.getTime()}`).substring(0, 12).toUpperCase();
-
+    rxText += `_______________________\nيرجى الالتزام بالجرعات.`;
+    const doctorName = document.getElementById('ctrlTitle')?.textContent.replace('لوحة: ', '').trim() || 'طبيب';
     try {
         const { data: docSnap, error } = await supabase.from('health_files').select('prescriptions').eq('id', patientId).single();
         if (error) return;
         const currentRx = docSnap.prescriptions || [];
-        
-        // حفظ الروشتة مع بيانات الختم الرقمي
-        currentRx.push({ 
-            doctor: docInfo.name, 
-            specialty: docInfo.specialty, 
-            verCode: verCode,
-            text: rxText, 
-            date: date.toISOString() 
-        });
-        
+        currentRx.push({ doctor: doctorName, text: rxText, date: new Date().toISOString() });
         await supabase.from('health_files').update({ prescriptions: currentRx }).eq('id', patientId);
         showToast('تم حفظ الروشتة في ملف المريض بنجاح!');
         closeModal();
         fetchPatientHealthFile(patientId, { specialty: 'general' }); 
     } catch (err) { showToast('خطأ في حفظ الروشتة'); }
 }
-
-
-
-window.addPrescriptionRow = () => {
-    const container = document.getElementById('medListContainer');
-    const newRow = document.createElement('div');
-    newRow.className = 'bg-gray-50 p-3 rounded-xl border relative';
-    newRow.style.borderColor = 'var(--border)';
-    newRow.innerHTML = `
-        <button type="button" onclick="this.parentElement.remove()" class="absolute top-2 left-2 text-red-500 hover:text-red-700"><i class="fas fa-times-circle"></i></button>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <input type="text" required class="ctrl-input text-sm" placeholder="اسم الدواء" name="drugName[]">
-            <input type="text" required class="ctrl-input text-sm" placeholder="الجرعة" name="dose[]">
-            <input type="text" required class="ctrl-input text-sm" placeholder="التكرار" name="freq[]">
-        </div>`;
-    container.appendChild(newRow);
-}
-
-
-
 window.deletePrescription = async (rxDate) => {
-    if (!confirm("هل أنت متأكد من حذف هذه الروشتة نهائياً؟")) return;
+    if (!confirm("هل أنت متأكد من حذف هذه الروشتة؟")) return;
     try {
         const { data: docSnap, error } = await supabase.from('health_files').select('*').eq('id', currentHealthFileId).single();
         if (error) return;
@@ -885,7 +800,6 @@ window.deletePrescription = async (rxDate) => {
         renderHealthDashboard({ ...docSnap, prescriptions: updatedRx });
     } catch (err) { showToast('حدث خطأ أثناء الحذف'); }
 };
-
 
 window.openMedicineDonation = () => {
     openCtrlPanel('صندوق الأدوية الفائضة', `<div class="flex flex-col gap-5"><div class="bg-red-50 border-2 border-red-400 rounded-xl p-4 text-red-800"><div class="font-black text-lg mb-2"><i class="fas fa-exclamation-triangle"></i> تنبيه أمان</div><ul class="list-disc pr-5 space-y-1 text-sm font-bold"><li>الموقع يعمل كوسيط خيري فقط.</li><li>يُمنع نشر الأدوية النفسية أو المخدرة.</li><li>تأكد من تاريخ الصلاحية قبل الاستخدام.</li></ul></div><div class="bg-white p-5 rounded-xl border"><h4 class="font-bold mb-4 text-sm"><i class="fas fa-hand-holding-medical text-green-600"></i> تبرع بدواء فائض</h4><form onsubmit="submitMedicineDonation(event)" class="grid grid-cols-1 sm:grid-cols-2 gap-3"><input type="text" id="medDonorName" class="ctrl-input text-sm" placeholder="اسم المتبرع" required><input type="text" id="medDonationName" class="ctrl-input text-sm" placeholder="اسم الدواء التجاري" required><select id="medDonationType" class="ctrl-input text-sm"><option>حبوب / أقراص</option><option>شراب</option><option>كريم / مرهم</option><option>قطرات</option></select><input type="text" id="medDonationExpiry" class="ctrl-input text-sm" placeholder="تاريخ الانتهاء (10/2025)" required><input type="text" id="medDonationQty" class="ctrl-input text-sm" placeholder="الكمية" required><input type="tel" id="medDonationPhone" class="ctrl-input text-sm" placeholder="رقم الهاتف 09XX" required><textarea id="medDonationNotes" class="ctrl-input text-sm col-span-1 sm:col-span-2" rows="2" placeholder="ملاحظات"></textarea><button type="submit" class="col-span-1 sm:col-span-2 py-3 rounded-xl text-white font-bold text-sm" style="background: #059669;">نشر الدواء</button></form></div><div class="bg-white p-5 rounded-xl border"><h4 class="font-bold mb-4 text-sm"><i class="fas fa-list-alt text-green-600"></i> الأدوية المتوفرة</h4><div id="medicineDonationsList" class="flex flex-col gap-3"><p class="text-center py-8 text-gray-400 text-sm">جاري تحميل الأدوية...</p></div></div></div>`, '#059669');
@@ -974,24 +888,12 @@ window.setStatus = async (id, status) => {
         showToast(msg);
     } catch (e) { showToast('حدث خطأ'); }
 }
-//دالة ابحث عن دوائك============
+
 window.openMedicineFinder = () => { 
-    document.getElementById('modalContent').innerHTML = `<div class="p-6"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-lg" style="font-family: 'Noto Kufi Arabic'"><i class="fas fa-pills ml-2" style="color: var(--gold)"></i> ابحث عن دوائك</h3><button onclick="closeModal()" class="text-2xl hover:text-gray-400 leading-none">&times;</button></div><div class="mb-4 p-3 rounded-xl text-sm" style="background: var(--accent-light); color: var(--accent-dark)"><i class="fas fa-info-circle ml-1"></i> اكتب الأدوية المطلوبة وحدد مستوى الإلحاح، وسنتولى إرسالها للصيدليات. سيقوم أول صيدلية يتوفر فيها الدواء بالاتصال بك مباشرة!</div><form onsubmit="submitMedicineRequest(event)"><div class="mb-4"><label class="block text-sm font-semibold mb-2">الأدوية المطلوبة (نصياً)</label><textarea id="medList" class="ctrl-input" rows="3" placeholder="مثال: كونكور 5مغ، كاتافلام، شراب سيتامول" required></textarea></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4"><div><label class="block text-sm font-semibold mb-2">اسم المريض (اختياري)</label><input type="text" id="medName" class="ctrl-input" placeholder="اكتب اسمك"></div><div><label class="block text-sm font-semibold mb-2">رقم الهاتف للتواصل</label><input type="tel" id="medPhone" class="ctrl-input" placeholder="09XXXXXXXX" required></div></div><div class="mb-4"><label class="block text-sm font-semibold mb-2">مستوى الإلحاح</label><select id="medUrgency" class="ctrl-input"><option value="عاجل جداً (طوارئ)">عاجل جداً (طوارئ)</option><option value="عاجل (خلال اليوم)">عاجل (خلال اليوم)</option><option value="عادي" selected>عادي</option></select></div><div class="mb-6"><label class="block text-sm font-semibold mb-2">صورة الوصفة الطبية (اختياري)</label><div class="file-input-wrapper"><label class="file-input-label" for="medImage"><i class="fas fa-camera text-2xl mb-2"></i><span>اضغط لاختيار صورة الوصفة (إن وجدت)</span><img id="imagePreview" class="preview-image hidden" src="" alt="معاينة"></label><input type="file" id="medImage" accept="image/*" onchange="previewMedicineImage(event)"></div></div><button type="submit" id="medSubmitBtn" class="w-full py-3.5 rounded-xl text-white font-bold text-sm transition-all hover:opacity-90 flex items-center justify-center gap-2" style="background: var(--accent)"><i class="fas fa-paper-plane"></i> إرسال للصيدليات</button></form></div>`; 
-    document.getElementById('modalOverlay').classList.add('active'); 
-    lockScroll(); 
+    document.getElementById('modalContent').innerHTML = `<div class="p-6"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-lg"><i class="fas fa-pills ml-2" style="color: var(--gold)"></i> ابحث عن دوائك</h3><button onclick="closeModal()" class="text-2xl">&times;</button></div><div class="mb-4 p-3 rounded-xl text-sm" style="background: var(--accent-light); color: var(--accent-dark)">اكتب الأدوية المطلوبة وسنتولى إرسالها للصيدليات.</div><form onsubmit="submitMedicineRequest(event)"><div class="mb-4"><label class="block text-sm font-semibold mb-2">الأدوية المطلوبة</label><textarea id="medList" class="ctrl-input" rows="3" placeholder="مثال: كونكور 5مغ" required></textarea></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4"><div><label class="block text-sm font-semibold mb-2">اسم المريض</label><input type="text" id="medName" class="ctrl-input" placeholder="اكتب اسمك"></div><div><label class="block text-sm font-semibold mb-2">رقم الهاتف</label><input type="tel" id="medPhone" class="ctrl-input" placeholder="09XXXXXXXX" required></div></div><div class="mb-4"><label class="block text-sm font-semibold mb-2">مستوى الإلحاح</label><select id="medUrgency" class="ctrl-input"><option value="عاجل جداً (طوارئ)">عاجل جداً (طوارئ)</option><option value="عاجل (خلال اليوم)">عاجل (خلال اليوم)</option><option value="عادي" selected>عادي</option></select></div><div class="mb-6"><label class="block text-sm font-semibold mb-2">صورة الوصفة الطبية (اختياري)</label><div class="file-input-wrapper"><label class="file-input-label" for="medImage"><i class="fas fa-camera text-2xl mb-2"></i><span>اضغط لاختيار صورة</span><img id="imagePreview" class="preview-image hidden" src="" alt="معاينة"></label><input type="file" id="medImage" accept="image/*" onchange="previewMedicineImage(event)"></div></div><button type="submit" id="medSubmitBtn" class="w-full py-3.5 rounded-xl text-white font-bold text-sm" style="background: var(--accent)"><i class="fas fa-paper-plane"></i> إرسال للصيدليات</button></form></div>`; 
+    document.getElementById('modalOverlay').classList.add('active'); lockScroll(); 
 }
-
-window.previewMedicineImage = (event) => { 
-    const file = event.target.files[0]; 
-    const reader = new FileReader(); 
-    reader.onload = (e) => { 
-        const img = document.getElementById('imagePreview'); 
-        img.src = e.target.result; 
-        img.classList.remove('hidden'); 
-    }; 
-    reader.readAsDataURL(file); 
-}
-
+window.previewMedicineImage = (event) => { const file = event.target.files[0]; const reader = new FileReader(); reader.onload = (e) => { const img = document.getElementById('imagePreview'); img.src = e.target.result; img.classList.remove('hidden'); }; reader.readAsDataURL(file); }
 window.submitMedicineRequest = async (e) => { 
     e.preventDefault(); 
     const medList = document.getElementById('medList').value.trim();
@@ -1002,8 +904,7 @@ window.submitMedicineRequest = async (e) => {
     const fileInput = document.getElementById('medImage'); 
     const file = fileInput.files[0]; 
     
-    if (!medList) { showToast('الرجاء كتابة الأدوية المطلوبة'); return; }
-    if (!/^09\d{8}$/.test(phone)) { phoneInput.classList.add('input-invalid'); showToast('الرجاء إدخال رقم هاتف صحيح'); return; } 
+    if (!/^09\d{8}$/.test(phone)) { phoneInput.classList.add('input-invalid'); showToast('رقم هاتف غير صحيح'); return; } 
     phoneInput.classList.remove('input-invalid'); 
     
     const submitBtn = document.getElementById('medSubmitBtn'); 
@@ -1020,28 +921,10 @@ window.submitMedicineRequest = async (e) => {
         }
         const medRef = `MED-${Math.floor(Math.random() * 900) + 100}`; 
         await supabase.from('medicine_requests').insert([{ 
-            med_ref: medRef, 
-            med_list: medList,
-            urgency: urgency,
-            patient_name: name, 
-            patient_phone: phone, 
-            image_url: imageUrl, 
-            status: 'searching', 
-            notes: '', 
-            available_pharmacy: ''
+            med_ref: medRef, med_list: medList, urgency: urgency, patient_name: name, patient_phone: phone, 
+            image_url: imageUrl, status: 'searching', notes: '', available_pharmacy: ''
         }]); 
-        document.getElementById('modalContent').innerHTML = `
-        <div class="p-8 text-center">
-            <div class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4" style="background: var(--accent-light)"><i class="fas fa-check text-4xl" style="color: var(--accent)"></i></div>
-            <h3 class="text-xl font-bold mb-2" style="font-family: 'Noto Kufi Arabic'">تم إرسال طلبك بنجاح!</h3>
-            <p class="text-sm mb-2" style="color: var(--muted)">رقم طلبك الدوائي هو:</p>
-            <div class="text-2xl font-black text-yellow-600 mb-4">#${medRef}</div>
-            <p class="text-sm mb-6" style="color: var(--muted)">احفظ هذا الرقم للاستعلام عن حالة الدواء لاحقاً في خانة الاستعلام السريع أعلى الصفحة.</p>
-            <button onclick="copyText('${medRef}')" class="w-full py-3 rounded-xl text-white font-bold text-sm mb-2" style="background: var(--accent)">
-                <i class="fas fa-copy ml-2"></i> نسخ الكود
-            </button>
-            <button onclick="closeModal()" class="w-full py-2 rounded-xl border font-bold text-sm" style="border-color: var(--border)">حسناً</button>
-        </div>`; 
+        document.getElementById('modalContent').innerHTML = `<div class="p-8 text-center"><div class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4" style="background: var(--accent-light)"><i class="fas fa-check text-4xl" style="color: var(--accent)"></i></div><h3 class="text-xl font-bold mb-2">تم إرسال طلبك بنجاح!</h3><p class="text-sm mb-2">رقم طلبك الدوائي هو:</p><div class="text-2xl font-black text-yellow-600 mb-4">#${medRef}</div><button onclick="copyText('${medRef}')" class="w-full py-3 rounded-xl text-white font-bold text-sm mb-2" style="background: var(--accent)"><i class="fas fa-copy ml-2"></i> نسخ الكود</button><button onclick="closeModal()" class="w-full py-2 rounded-xl border font-bold text-sm" style="border-color: var(--border)">حسناً</button></div>`; 
     } catch (err) { 
         showToast('حدث خطأ أثناء إرسال الطلب'); 
         submitBtn.disabled = false; 
